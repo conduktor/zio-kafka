@@ -296,7 +296,7 @@ object AdminClient {
     override def describeClusterNodes(options: Option[DescribeClusterOptions] = None): Task[List[Node]] =
       fromKafkaFuture(
         describeCluster(options).map(_.nodes())
-      ).map(_.asScala.toList.map(Node.apply))
+      ).map(_.asScala.toList.flatMap(Node.apply))
 
     /**
      * Get the cluster controller.
@@ -304,7 +304,11 @@ object AdminClient {
     override def describeClusterController(options: Option[DescribeClusterOptions] = None): Task[Node] =
       fromKafkaFuture(
         describeCluster(options).map(_.controller())
-      ).map(Node.apply)
+      ).flatMap { jNode =>
+        Task.effect {
+          Node(jNode).get
+        }
+      }
 
     /**
      * Get the cluster id.
@@ -580,7 +584,7 @@ object AdminClient {
     members: List[MemberDescription],
     partitionAssignor: String,
     state: ConsumerGroupState,
-    coordinator: Node,
+    coordinator: Option[Node],
     authorizedOperations: Set[AclOperation]
   )
 
@@ -661,7 +665,12 @@ object AdminClient {
   }
 
   object Node {
-    def apply(jNode: JNode): Node = Node(jNode.id(), jNode.host(), jNode.port, Option(jNode.rack()))
+    private val noNodeId = JNode.noNode().id()
+    def apply(jNode: JNode): Option[Node] = Option(jNode).flatMap { notNullJNode =>
+      Option.when(notNullJNode.id() != noNodeId) {
+        Node(notNullJNode.id(), notNullJNode.host(), notNullJNode.port, Option(notNullJNode.rack()))
+      }
+    }
   }
 
   case class TopicDescription(
@@ -683,9 +692,14 @@ object AdminClient {
     }
   }
 
-  case class TopicPartitionInfo(partition: Int, leader: Node, replicas: List[Node], isr: List[Node]) {
+  case class TopicPartitionInfo(partition: Int, leader: Option[Node], replicas: List[Node], isr: List[Node]) {
     lazy val asJava =
-      new JTopicPartitionInfo(partition, leader.asJava, replicas.map(_.asJava).asJava, isr.map(_.asJava).asJava)
+      new JTopicPartitionInfo(
+        partition,
+        leader.map(_.asJava).getOrElse(JNode.noNode()),
+        replicas.map(_.asJava).asJava,
+        isr.map(_.asJava).asJava
+      )
   }
 
   object TopicPartitionInfo {
@@ -693,8 +707,26 @@ object AdminClient {
       TopicPartitionInfo(
         jtpi.partition(),
         Node(jtpi.leader()),
-        jtpi.replicas().asScala.map(Node.apply).toList,
-        jtpi.isr().asScala.map(Node.apply).toList
+        jtpi
+          .replicas()
+          .asScala
+          .map(Node.apply)
+          .map {
+            case Some(node) => node
+            case None =>
+              throw new RuntimeException("NoNode node not expected among topic replicas")
+          }
+          .toList,
+        jtpi
+          .isr()
+          .asScala
+          .map(Node.apply)
+          .map {
+            case Some(node) => node
+            case None =>
+              throw new RuntimeException("NoNode node not expected among topic in sync replicas")
+          }
+          .toList
       )
   }
 
