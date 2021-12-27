@@ -1,6 +1,7 @@
 package zio.kafka.admin
 
 import org.apache.kafka.clients.consumer.ConsumerRecord
+import org.apache.kafka.common.{ Node => JNode }
 import zio.{ Chunk, Has, Schedule, ZIO }
 import zio.blocking.Blocking
 import zio.clock.Clock
@@ -309,6 +310,29 @@ object AdminSpec extends DefaultRunnableSpec {
               node.id,
               hasValues(exists(hasField("replicaInfos", _.replicaInfos, hasKey(TopicPartition(topicName, 0)))))
             )
+          )
+        }
+      },
+      test("should correctly handle no node (null) when converting JNode to Node") {
+        assert(AdminClient.Node.apply(null))(isNone)
+      },
+      test("should correctly handle noNode when converting JNode to Node") {
+        assert(AdminClient.Node.apply(JNode.noNode()))(isNone)
+      },
+      testM("should correctly keep all information when converting a valid jNode to Node") {
+        val posIntGen = Gen.int(0, Int.MaxValue)
+        check(posIntGen, Gen.string1(Gen.anyChar), posIntGen, Gen.option(Gen.anyString)) { (id, host, port, rack) =>
+          val jNode = new JNode(id, host, port, rack.orNull)
+          assert(AdminClient.Node.apply(jNode).map(_.asJava))(
+            equalTo(Some(jNode))
+          )
+        }
+      },
+      testM("should convert a not null jNode to None only when this jNode is `empty`") {
+        check(Gen.anyInt, Gen.anyString, Gen.anyInt, Gen.option(Gen.anyString)) { (id, host, port, rack) =>
+          val jNode = new JNode(id, host, port, rack.orNull)
+          assert(AdminClient.Node.apply(jNode).isEmpty)(
+            equalTo(jNode.isEmpty)
           )
         }
       }
