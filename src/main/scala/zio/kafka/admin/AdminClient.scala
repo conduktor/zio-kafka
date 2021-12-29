@@ -307,7 +307,7 @@ object AdminClient {
       ).flatMap { nodes =>
         Task.foreach(nodes.asScala.toList) { jNode =>
           ZIO
-            .getOrFailWith(new RuntimeException("Empty/NoNode not expected when listing cluster node"))(
+            .getOrFailWith(new RuntimeException("NoNode not expected when listing cluster node"))(
               Node(jNode)
             )
         }
@@ -677,14 +677,26 @@ object AdminClient {
       else JNewPartitions.increaseTo(totalCount)
   }
 
-  case class Node(id: Int, host: String, port: Int, rack: Option[String] = None) {
-    lazy val asJava = rack.fold(new JNode(id, host, port))(rack => new JNode(id, host, port, rack))
+  /**
+   * @param id
+   *   >= 0
+   * @param host
+   *   can't be empty string if present
+   * @param port
+   *   can't be negative if present
+   */
+  case class Node(id: Int, host: Option[String], port: Option[Int], rack: Option[String] = None) {
+    lazy val asJava = new JNode(id, host.getOrElse(""), port.getOrElse(-1), rack.orNull)
   }
-
   object Node {
-    def apply(jNode: JNode): Option[Node] = Option(jNode).flatMap { notNullJNode =>
-      Option.when(!notNullJNode.isEmpty) {
-        Node(notNullJNode.id(), notNullJNode.host(), notNullJNode.port, Option(notNullJNode.rack()))
+    def apply(jNode: JNode): Option[Node] = Option(jNode).flatMap { jNode =>
+      Option.when(jNode.id() != JNode.noNode().id()) {
+        Node(
+          id = jNode.id(),
+          host = Option(jNode.host()).filterNot(_.isEmpty),
+          port = Option.when(jNode.port() >= 0)(jNode.port()),
+          rack = Option(jNode.rack())
+        )
       }
     }
   }

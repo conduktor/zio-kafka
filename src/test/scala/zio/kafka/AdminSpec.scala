@@ -328,13 +328,20 @@ object AdminSpec extends DefaultRunnableSpec {
           )
         }
       },
-      testM("should convert a not null jNode to None only when this jNode is `empty`") {
-        check(Gen.anyInt, Gen.anyString, Gen.anyInt, Gen.option(Gen.anyString)) { (id, host, port, rack) =>
+      testM("will replace invalid port by None") {
+        val posIntGen = Gen.int(0, Int.MaxValue)
+        check(posIntGen, Gen.string1(Gen.anyChar), Gen.anyInt, Gen.option(Gen.anyString)) { (id, host, port, rack) =>
           val jNode = new JNode(id, host, port, rack.orNull)
-          assert(AdminClient.Node.apply(jNode).isEmpty)(
-            equalTo(jNode.isEmpty)
+          assert(AdminClient.Node.apply(jNode).map(_.port.isEmpty))(
+            equalTo(Some(port < 0))
           )
         }
+      },
+      test("will replace empty host by None") {
+        val jNode = new JNode(0, "", 9092, null)
+        assert(AdminClient.Node.apply(jNode).map(_.host.isEmpty))(
+          equalTo(Some(true))
+        )
       }
     ).provideSomeLayerShared[TestEnvironment](Kafka.embedded.mapError(TestFailure.fail) ++ Clock.live) @@ sequential
 
