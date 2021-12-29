@@ -307,7 +307,7 @@ object AdminClient {
       ).flatMap { nodes =>
         Task.foreach(nodes.asScala.toList) { jNode =>
           ZIO
-            .getOrFailWith(new RuntimeException("NoNode not expected when listing cluster node"))(
+            .getOrFailWith(new RuntimeException("NoNode not expected when listing cluster nodes"))(
               Node(jNode)
             )
         }
