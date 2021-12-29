@@ -321,7 +321,7 @@ object AdminClient {
         describeCluster(options).map(_.controller())
       ).flatMap { jNode =>
         ZIO
-          .getOrFailWith(new RuntimeException("Empty/NoNode not expected when listing cluster node"))(Node(jNode))
+          .getOrFailWith(new RuntimeException("Empty/NoNode not expected when listing cluster nodes"))(Node(jNode))
       }
 
     /**
