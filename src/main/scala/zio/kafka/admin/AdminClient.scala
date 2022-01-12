@@ -1,6 +1,6 @@
 package zio.kafka.admin
 
-import java.util.Optional
+import org.apache.kafka.clients.admin.ListOffsetsResult.{ ListOffsetsResultInfo => JListOffsetsResultInfo }
 import org.apache.kafka.clients.admin.{
   AdminClient => JAdminClient,
   AlterConsumerGroupOffsetsOptions => JAlterConsumerGroupOffsetsOptions,
@@ -24,7 +24,6 @@ import org.apache.kafka.clients.admin.{
   TopicListing => JTopicListing,
   _
 }
-import org.apache.kafka.clients.admin.ListOffsetsResult.{ ListOffsetsResultInfo => JListOffsetsResultInfo }
 import org.apache.kafka.clients.consumer.{ OffsetAndMetadata => JOffsetAndMetadata }
 import org.apache.kafka.common.config.{ ConfigResource => JConfigResource }
 import org.apache.kafka.common.errors.ApiException
@@ -42,6 +41,7 @@ import zio._
 import zio.blocking.Blocking
 import zio.duration.Duration
 
+import java.util.Optional
 import scala.jdk.CollectionConverters._
 
 trait AdminClient {
@@ -73,6 +73,18 @@ trait AdminClient {
    * Delete a single topic.
    */
   def deleteTopic(topic: String): Task[Unit]
+
+  /**
+   * Empty multiple topics.
+   */
+  def emptyTopics(
+    topics: Iterable[String]
+  ): Task[Unit]
+
+  /**
+   * Empty a single topic.
+   */
+  def emptyTopic(topic: String): Task[Unit]
 
   /**
    * List the topics in the cluster.
@@ -238,6 +250,35 @@ object AdminClient {
      */
     override def deleteTopic(topic: String): Task[Unit] =
       deleteTopics(List(topic))
+
+    /**
+     * Empty multiple topics.
+     */
+    override def emptyTopics(topics: Iterable[String]): Task[Unit] = {
+      val getTopicPartitionOffsets = describeTopics(topics).map(descriptions =>
+        descriptions.flatMap { case (name, topicDescription) =>
+          val topicName  = name
+          val partitions = topicDescription.partitions
+          partitions.map(p => (TopicPartition(topicName, p.partition).asJava, OffsetSpec.LatestSpec.asJava)).toMap
+        }
+      )
+
+      @inline def getLastOffsets(offsets: Map[JTopicPartition, JOffsetSpec]) = fromKafkaFuture {
+        blocking.effectBlocking(adminClient.listOffsets(offsets.asJava).all())
+      }.map(_.asScala.map { case (partition, v) => partition -> RecordsToDelete.beforeOffset(v.offset()) }.toMap)
+
+      @inline def deleteRecords(records: Map[JTopicPartition, RecordsToDelete]) = fromKafkaFuture {
+        blocking.effectBlocking(adminClient.deleteRecords(records.asJava).all())
+      }
+
+      (getTopicPartitionOffsets >>= getLastOffsets >>= deleteRecords).unit
+    }
+
+    /**
+     * Empty a single topic.
+     */
+    override def emptyTopic(topic: String): Task[Unit] =
+      emptyTopics(List(topic))
 
     /**
      * List the topics in the cluster.

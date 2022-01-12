@@ -2,7 +2,6 @@ package zio.kafka.admin
 
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.apache.kafka.common.{ Node => JNode }
-import zio.{ Chunk, Has, Schedule, ZIO }
 import zio.blocking.Blocking
 import zio.clock.Clock
 import zio.duration.Duration
@@ -19,14 +18,17 @@ import zio.kafka.admin.AdminClient.{
   OffsetSpec,
   TopicPartition
 }
-import zio.kafka.consumer.{ Consumer, OffsetBatch, Subscription }
+import zio.kafka.consumer.{ CommittableRecord, Consumer, OffsetBatch, Subscription }
 import zio.kafka.embedded.Kafka
 import zio.kafka.serde.Serde
-import zio.stream.ZTransducer
+import zio.stream.{ ZStream, ZTransducer }
 import zio.test.Assertion._
 import zio.test.TestAspect._
 import zio.test._
 import zio.test.environment.TestEnvironment
+import zio.{ Chunk, Has, Schedule, ZIO }
+
+import scala.concurrent.duration.DurationInt
 
 object AdminSpec extends DefaultRunnableSpec {
   override def spec =
@@ -209,6 +211,62 @@ object AdminSpec extends DefaultRunnableSpec {
               equalTo(records(1))
             ) &&
             assert(recordsAfterAltering.get(2))(isNone)
+        }
+      },
+      testM("create, produce, empty single topic with single partition") {
+        KafkaTestUtils.withAdmin { client =>
+          type Env = Has[Kafka] with Blocking with Clock
+          val topicName = "topic10"
+          val timeout   = Duration.fromScala(3.second)
+
+          def consumeAndCommit(count: Long) =
+            Consumer
+              .subscribeAnd(Subscription.Topics(Set(topicName)))
+              .partitionedStream[Env, String, String](Serde.string, Serde.string)
+              .flatMapPar(1)(_._2)
+              .take(count)
+              .mapM(r => r.offset.commit.as(r))
+              .timeoutTo[Env with Has[Consumer], Throwable, CommittableRecord[String, String]](timeout)(ZStream.empty)
+              .runCount
+              .provideSomeLayer[Env](consumer(topicName, Some(topicName)))
+
+          for {
+            _ <- client.createTopic(AdminClient.NewTopic(topicName, 1, 1))
+            _ <- produceOne(topicName, "key", "message").provideSomeLayer[Has[Kafka] with Blocking with Clock](producer)
+            recordsBefore <- consumeAndCommit(1)
+            _             <- client.emptyTopic(topicName)
+            recordsAfter  <- consumeAndCommit(1)
+            _             <- client.deleteTopic(topicName)
+          } yield assert(recordsBefore)(equalTo(1L)) && assert(recordsAfter)(equalTo(0L))
+
+        }
+      },
+      testM("create, produce, empty single topic with several partitions") {
+        KafkaTestUtils.withAdmin { client =>
+          type Env = Has[Kafka] with Blocking with Clock
+          val topicName = "topic11"
+          val timeout   = Duration.fromScala(3.second)
+
+          def consumeAndCommit(count: Long) =
+            Consumer
+              .subscribeAnd(Subscription.Topics(Set(topicName)))
+              .partitionedStream[Env, String, String](Serde.string, Serde.string)
+              .flatMapPar(1)(_._2)
+              .take(count)
+              .mapM(r => r.offset.commit.as(r))
+              .timeoutTo[Env with Has[Consumer], Throwable, CommittableRecord[String, String]](timeout)(ZStream.empty)
+              .runCount
+              .provideSomeLayer[Env](consumer(topicName, Some(topicName)))
+
+          for {
+            _ <- client.createTopic(AdminClient.NewTopic(topicName, 2, 1))
+            _ <- produceOne(topicName, "key", "message").provideSomeLayer[Has[Kafka] with Blocking with Clock](producer)
+            recordsBefore <- consumeAndCommit(1)
+            _             <- client.emptyTopic(topicName)
+            recordsAfter  <- consumeAndCommit(1)
+            _             <- client.deleteTopic(topicName)
+          } yield assert(recordsBefore)(equalTo(1L)) && assert(recordsAfter)(equalTo(0L))
+
         }
       },
       testM("list consumer groups") {
