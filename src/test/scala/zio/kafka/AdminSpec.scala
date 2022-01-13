@@ -19,10 +19,10 @@ import zio.kafka.admin.AdminClient.{
   OffsetSpec,
   TopicPartition
 }
-import zio.kafka.consumer.{ CommittableRecord, Consumer, OffsetBatch, Subscription }
+import zio.kafka.consumer.{ Consumer, OffsetBatch, Subscription }
 import zio.kafka.embedded.Kafka
 import zio.kafka.serde.Serde
-import zio.stream.{ ZStream, ZTransducer }
+import zio.stream.ZTransducer
 import zio.test.Assertion._
 import zio.test.TestAspect._
 import zio.test._
@@ -30,7 +30,6 @@ import zio.test.environment.TestEnvironment
 import zio.{ Chunk, Has, Schedule, ZIO }
 
 import java.util.UUID
-import scala.concurrent.duration.DurationInt
 
 object AdminSpec extends DefaultRunnableSpec {
   override def spec =
@@ -215,62 +214,21 @@ object AdminSpec extends DefaultRunnableSpec {
             assert(recordsAfterAltering.get(2))(isNone)
         }
       },
-      testM("create, produce, delete records from a topic with a single partition") {
+      testM("create, produce, delete records from a topic") {
         KafkaTestUtils.withAdmin { client =>
           type Env = Has[Kafka] with Blocking with Clock
-          val topicName = UUID.randomUUID().toString
-          val timeout   = Duration.fromScala(3.second)
-
-          def consumeAndCommit(count: Long) =
-            Consumer
-              .subscribeAnd(Subscription.Topics(Set(topicName)))
-              .partitionedStream[Env, String, String](Serde.string, Serde.string)
-              .flatMap(_._2)
-              .take(count)
-              .mapM(r => r.offset.commit.as(r))
-              .timeoutTo[Env with Has[Consumer], Throwable, CommittableRecord[String, String]](timeout)(ZStream.empty)
-              .runCount
-              .provideSomeLayer[Env](consumer(topicName, Some(topicName)))
+          val topicName      = UUID.randomUUID().toString
+          val topicPartition = TopicPartition(topicName, 0)
 
           for {
             _             <- client.createTopic(AdminClient.NewTopic(topicName, 1, 1))
             _             <- produceOne(topicName, "key", "message").provideSomeLayer[Env](producer)
-            _             <- produceOne(topicName, "key", "message").provideSomeLayer[Env](producer)
-            recordsBefore <- consumeAndCommit(1)
-            _             <- client.deleteRecords(Map(TopicPartition(topicName, 0) -> RecordsToDelete.beforeOffset(2L)))
-            recordsAfter  <- consumeAndCommit(1)
+            offsetsBefore <- client.listOffsets(Map(topicPartition -> OffsetSpec.EarliestSpec))
+            _             <- client.deleteRecords(Map(topicPartition -> RecordsToDelete.beforeOffset(1L)))
+            offsetsAfter  <- client.listOffsets(Map(topicPartition -> OffsetSpec.EarliestSpec))
             _             <- client.deleteTopic(topicName)
-          } yield assert(recordsBefore)(equalTo(1L)) && assert(recordsAfter)(equalTo(0L))
-
-        }
-      },
-      testM("create, produce, delete records from a topic with several partitions") {
-        KafkaTestUtils.withAdmin { client =>
-          type Env = Has[Kafka] with Blocking with Clock
-          val topicName = UUID.randomUUID().toString
-          val timeout   = Duration.fromScala(3.second)
-
-          def consumeAndCommit(count: Long) =
-            Consumer
-              .subscribeAnd(Subscription.Topics(Set(topicName)))
-              .partitionedStream[Env, String, String](Serde.string, Serde.string)
-              .flatMap(_._2)
-              .take(count)
-              .mapM(r => r.offset.commit.as(r))
-              .timeoutTo[Env with Has[Consumer], Throwable, CommittableRecord[String, String]](timeout)(ZStream.empty)
-              .runCount
-              .provideSomeLayer[Env](consumer(topicName, Some(topicName)))
-
-          for {
-            _             <- client.createTopic(AdminClient.NewTopic(topicName, 2, 1))
-            _             <- produceOne(topicName, "key1", "message").provideSomeLayer[Env](producer)
-            _             <- produceOne(topicName, "key2", "message").provideSomeLayer[Env](producer)
-            recordsBefore <- consumeAndCommit(1)
-            _             <- client.deleteRecords(Map(TopicPartition(topicName, 0) -> RecordsToDelete.beforeOffset(1L)))
-            _             <- client.deleteRecords(Map(TopicPartition(topicName, 1) -> RecordsToDelete.beforeOffset(1L)))
-            recordsAfter  <- consumeAndCommit(1)
-            _             <- client.deleteTopic(topicName)
-          } yield assert(recordsBefore)(equalTo(1L)) && assert(recordsAfter)(equalTo(0L))
+          } yield assert(offsetsBefore.get(topicPartition).map(_.offset))(isSome(equalTo(0L))) &&
+            assert(offsetsAfter.get(topicPartition).map(_.offset))(isSome(equalTo(1L)))
 
         }
       },
