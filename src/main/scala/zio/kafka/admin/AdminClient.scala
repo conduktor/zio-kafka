@@ -79,7 +79,7 @@ trait AdminClient {
    */
   def deleteRecords(
     recordsToDelete: Map[TopicPartition, RecordsToDelete],
-    deleteRecordsOptions: Option[DeleteRecordsOptions]
+    deleteRecordsOptions: Option[DeleteRecordsOptions] = None
   ): Task[Unit]
 
   /**
@@ -252,7 +252,7 @@ object AdminClient {
      */
     override def deleteRecords(
       recordsToDelete: Map[TopicPartition, RecordsToDelete],
-      deleteRecordsOptions: Option[DeleteRecordsOptions]
+      deleteRecordsOptions: Option[DeleteRecordsOptions] = None
     ): Task[Unit] = {
       val records = recordsToDelete.map { case (k, v) => k.asJava -> v }.asJava
       fromKafkaFuture {
