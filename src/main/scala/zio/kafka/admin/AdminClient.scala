@@ -255,13 +255,13 @@ object AdminClient {
       deleteRecordsOptions: Option[DeleteRecordsOptions] = None
     ): Task[Unit] = {
       val records = recordsToDelete.map { case (k, v) => k.asJava -> v }.asJava
-      fromKafkaFuture {
+      fromKafkaFutureVoid {
         blocking.effectBlocking(
           deleteRecordsOptions
             .fold(adminClient.deleteRecords(records))(opts => adminClient.deleteRecords(records, opts))
             .all()
         )
-      }.unit
+      }
     }
 
     /**
