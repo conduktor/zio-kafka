@@ -231,9 +231,9 @@ object AdminSpec extends DefaultRunnableSpec {
               .provideSomeLayer[Env](consumer(topicName, Some(topicName)))
 
           for {
-            _ <- client.createTopic(AdminClient.NewTopic(topicName, 1, 1))
-            _ <- produceOne(topicName, "key", "message").provideSomeLayer[Has[Kafka] with Blocking with Clock](producer)
-            _ <- produceOne(topicName, "key", "message").provideSomeLayer[Has[Kafka] with Blocking with Clock](producer)
+            _             <- client.createTopic(AdminClient.NewTopic(topicName, 1, 1))
+            _             <- produceOne(topicName, "key", "message").provideSomeLayer[Env](producer)
+            _             <- produceOne(topicName, "key", "message").provideSomeLayer[Env](producer)
             recordsBefore <- consumeAndCommit(1)
             _             <- client.emptyTopic(topicName)
             recordsAfter  <- consumeAndCommit(1)
@@ -260,11 +260,9 @@ object AdminSpec extends DefaultRunnableSpec {
               .provideSomeLayer[Env](consumer(topicName, Some(topicName)))
 
           for {
-            _ <- client.createTopic(AdminClient.NewTopic(topicName, 2, 1))
-            _ <-
-              produceOne(topicName, "key1", "message1").provideSomeLayer[Has[Kafka] with Blocking with Clock](producer)
-            _ <-
-              produceOne(topicName, "key2", "message2").provideSomeLayer[Has[Kafka] with Blocking with Clock](producer)
+            _             <- client.createTopic(AdminClient.NewTopic(topicName, 2, 1))
+            _             <- produceOne(topicName, "key1", "message").provideSomeLayer[Env](producer)
+            _             <- produceOne(topicName, "key2", "message").provideSomeLayer[Env](producer)
             recordsBefore <- consumeAndCommit(1)
             _             <- client.emptyTopic(topicName)
             recordsAfter  <- consumeAndCommit(1)
