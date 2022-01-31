@@ -1,14 +1,14 @@
 import sbt.Keys.{ fork, parallelExecution }
 
 lazy val scala212  = "2.12.15"
-lazy val scala213  = "2.13.6"
-lazy val scala3    = "3.0.2"
+lazy val scala213  = "2.13.8"
+lazy val scala3    = "3.1.1"
 lazy val mainScala = scala213
 lazy val allScala  = Seq(scala212, scala3, mainScala)
 
 lazy val zioVersion           = "1.0.12"
-lazy val kafkaVersion         = "2.8.1"
-lazy val embeddedKafkaVersion = "2.8.1" // Should be the same as kafkaVersion, except for the patch part
+lazy val kafkaVersion         = "3.1.0"
+lazy val embeddedKafkaVersion = "3.1.0" // Should be the same as kafkaVersion, except for the patch part
 
 lazy val embeddedKafka = "io.github.embeddedkafka" %% "embedded-kafka" % embeddedKafkaVersion % "test"
 
@@ -68,7 +68,7 @@ lazy val kafka =
         "dev.zio"                   %% "zio-test"                % zioVersion % "test",
         "dev.zio"                   %% "zio-test-sbt"            % zioVersion % "test",
         "org.apache.kafka"           % "kafka-clients"           % kafkaVersion,
-        "com.fasterxml.jackson.core" % "jackson-databind"        % "2.13.1",
+        "com.fasterxml.jackson.core" % "jackson-databind"        % "2.12.6",
         "ch.qos.logback"             % "logback-classic"         % "1.2.10"   % "test",
         "org.scala-lang.modules"    %% "scala-collection-compat" % "2.6.0"
       ) ++ {
