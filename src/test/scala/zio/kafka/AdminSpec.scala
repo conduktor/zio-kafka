@@ -2,6 +2,7 @@ package zio.kafka.admin
 
 import org.apache.kafka.clients.admin.RecordsToDelete
 import org.apache.kafka.clients.consumer.ConsumerRecord
+import org.apache.kafka.common.requests.OffsetFetchResponse
 import org.apache.kafka.common.{ Node => JNode }
 import zio.blocking.Blocking
 import zio.clock.Clock
@@ -30,6 +31,7 @@ import zio.test.environment.TestEnvironment
 import zio.{ Chunk, Has, Schedule, ZIO }
 
 import java.util.UUID
+import org.apache.kafka.clients.consumer.{ OffsetAndMetadata => JOffsetAndMetadata }
 
 object AdminSpec extends DefaultRunnableSpec {
   override def spec =
@@ -362,6 +364,17 @@ object AdminSpec extends DefaultRunnableSpec {
         val jNode = new JNode(0, "", 9092, null)
         assert(AdminClient.Node.apply(jNode).map(_.host.isEmpty))(
           equalTo(Some(true))
+        )
+      },
+      test("should correctly handle no metadata when converting OffsetAndMetadata to JOffsetAndMetadata") {
+        assert(AdminClient.OffsetAndMetadata(offset = 0, metadata = None).asJava.metadata())(
+          equalTo(OffsetFetchResponse.NO_METADATA)
+        )
+      },
+      test("should correctly handle no metadata when converting JOffsetAndMetadata to OffsetAndMetadata") {
+        assert(AdminClient.OffsetAndMetadata(new JOffsetAndMetadata(0, null)).metadata)(isNone) &&
+        assert(AdminClient.OffsetAndMetadata(new JOffsetAndMetadata(0, OffsetFetchResponse.NO_METADATA)).metadata)(
+          isNone
         )
       }
     ).provideSomeLayerShared[TestEnvironment](Kafka.embedded.mapError(TestFailure.fail) ++ Clock.live) @@ sequential

@@ -28,6 +28,7 @@ import org.apache.kafka.clients.admin.{
 import org.apache.kafka.clients.consumer.{ OffsetAndMetadata => JOffsetAndMetadata }
 import org.apache.kafka.common.config.{ ConfigResource => JConfigResource }
 import org.apache.kafka.common.errors.ApiException
+import org.apache.kafka.common.requests.OffsetFetchResponse
 import org.apache.kafka.common.{
   ConsumerGroupState => JConsumerGroupState,
   IsolationLevel => JIsolationLevel,
@@ -875,14 +876,18 @@ object AdminClient extends Accessible[AdminClient] {
   final case class OffsetAndMetadata(
     offset: Long,
     leaderEpoch: Option[Int] = None,
-    metadata: Option[String] = None
+    metadata: Option[String] = None //non empty string
   ) {
     def asJava = new JOffsetAndMetadata(offset, leaderEpoch.map(Int.box).toJava, metadata.orNull)
   }
 
   object OffsetAndMetadata {
     def apply(om: JOffsetAndMetadata): OffsetAndMetadata =
-      OffsetAndMetadata(om.offset(), om.leaderEpoch().toScala.map(_.toInt), Some(om.metadata()))
+      OffsetAndMetadata(
+        offset = om.offset(),
+        leaderEpoch = om.leaderEpoch().toScala.map(_.toInt),
+        metadata = Option(om.metadata()).filterNot(_ == OffsetFetchResponse.NO_METADATA)
+      )
   }
 
   final case class AlterConsumerGroupOffsetsOptions(
