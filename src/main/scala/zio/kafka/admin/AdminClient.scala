@@ -343,7 +343,7 @@ object AdminClient extends Accessible[AdminClient] {
             .values()
         )
         .map(
-          _.asScala.map { case (configResource, configFuture) =>
+          _.asScala.view.map { case (configResource, configFuture) =>
             (
               ConfigResource(configResource),
               ZIO

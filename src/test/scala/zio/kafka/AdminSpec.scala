@@ -92,16 +92,20 @@ object AdminSpec extends DefaultRunnableSpec {
           for {
             list1 <- client.listTopics()
             _ <- client.createTopics(List(AdminClient.NewTopic("topic6", 1, 1), AdminClient.NewTopic("topic7", 4, 1)))
-            configs <- client.describeConfigs(
-                         List(
-                           ConfigResource(ConfigResourceType.Topic, "topic6"),
-                           ConfigResource(ConfigResourceType.Topic, "topic7")
-                         )
-                       )
+            configResources = List(
+                                ConfigResource(ConfigResourceType.Topic, "topic6"),
+                                ConfigResource(ConfigResourceType.Topic, "topic7")
+                              )
+            (configs, configsAsync) <- client.describeConfigs(configResources) <&>
+                                         client.describeConfigsAsync(configResources)
+            awaitedConfigsAsync <- ZIO.foreachPar(configsAsync) { case (resource, configTask) =>
+                                     configTask.map(config => (resource, config))
+                                   }
             _     <- client.deleteTopics(List("topic6", "topic7"))
             list3 <- client.listTopics()
           } yield assert(list1.size)(equalTo(0)) &&
             assert(configs.size)(equalTo(2)) &&
+            assert(awaitedConfigsAsync.size)(equalTo(2)) &&
             assert(list3.size)(equalTo(0))
         }
       },
