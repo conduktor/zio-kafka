@@ -333,7 +333,7 @@ object AdminClient extends Accessible[AdminClient] {
      */
     override def describeConfigsAsync(
       configResources: Iterable[ConfigResource],
-      options: Option[DescribeConfigsOptions]
+      options: Option[DescribeConfigsOptions] = None
     ): Task[Map[ConfigResource, Task[KafkaConfig]]] = {
       val asJava = configResources.map(_.asJava).asJavaCollection
       blocking
