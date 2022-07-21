@@ -144,6 +144,20 @@ object AdminSpec extends DefaultRunnableSpec {
           } yield assert(configs.size)(equalTo(1))
         }
       },
+      testM("describe broker config async") {
+        KafkaTestUtils.withAdmin { client =>
+          for {
+            configTasks <- client.describeConfigsAsync(
+                             List(
+                               ConfigResource(ConfigResourceType.Broker, "0")
+                             )
+                           )
+            configs <- ZIO.foreachPar(configTasks) { case (resource, configTask) =>
+                         configTask.map(config => (resource, config))
+                       }
+          } yield assertTrue(configs.size == 1)
+        }
+      },
       testM("list offsets") {
         KafkaTestUtils.withAdmin { client =>
           val topic    = "topic8"
