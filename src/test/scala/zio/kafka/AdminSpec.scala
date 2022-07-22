@@ -100,16 +100,21 @@ object AdminSpec extends ZIOSpecWithKafka {
             _ <- client.createTopics(
                    List(AdminClient.NewTopic("adminspec-topic6", 1, 1), AdminClient.NewTopic("adminspec-topic7", 4, 1))
                  )
-            configs <- client.describeConfigs(
-                         List(
-                           ConfigResource(ConfigResourceType.Topic, "adminspec-topic6"),
-                           ConfigResource(ConfigResourceType.Topic, "adminspec-topic7")
-                         )
-                       )
+            configResources = List(
+              ConfigResource(ConfigResourceType.Topic, "topic6"),
+              ConfigResource(ConfigResourceType.Topic, "topic7")
+            )
+            configsAsync = client.describeConfigsAsync(configResources).flatMap { configs =>
+              ZIO.foreachPar(configs) { case (resource, configTask) =>
+                configTask.map(config => (resource, config))
+              }
+            }
+            (configs, awaitedConfigsAsync) <- client.describeConfigs(configResources) <&> configsAsync
             _     <- client.deleteTopics(List("adminspec-topic6", "adminspec-topic7"))
             list3 <- listTopicsFiltered(client)
           } yield assert(list1.size)(equalTo(0)) &&
             assert(configs.size)(equalTo(2)) &&
+            assert(awaitedConfigsAsync.size)(equalTo(2)) &&
             assert(list3.size)(equalTo(0))
         }
       },
@@ -152,7 +157,21 @@ object AdminSpec extends ZIOSpecWithKafka {
           } yield assert(configs.size)(equalTo(1))
         }
       },
-      test("list offsets") {
+      test("describe broker config async") {
+        KafkaTestUtils.withAdmin { client =>
+          for {
+            configTasks <- client.describeConfigsAsync(
+                             List(
+                               ConfigResource(ConfigResourceType.Broker, "0")
+                             )
+                           )
+            configs <- ZIO.foreachPar(configTasks) { case (resource, configTask) =>
+                         configTask.map(config => (resource, config))
+                       }
+          } yield assertTrue(configs.size == 1)
+        }
+      },
+      testM("list offsets") {
         KafkaTestUtils.withAdmin { client =>
           val topic    = "adminspec-topic8"
           val msgCount = 20
