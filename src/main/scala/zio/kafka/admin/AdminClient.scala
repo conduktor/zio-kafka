@@ -558,7 +558,7 @@ object AdminClient extends Accessible[AdminClient] {
               brokerId.intValue(),
               ZIO
                 .fromCompletionStage(descriptionsFuture.toCompletionStage)
-                .map(_.asScala.view.mapValues(LogDirDescription(_)).toMap)
+                .map(_.asScala.toMap.map { case (k, v) => (k, LogDirDescription(v)) })
             )
 
           }.toMap
