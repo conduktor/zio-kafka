@@ -460,8 +460,9 @@ object AdminClient extends Accessible[AdminClient] {
       topicPartitionOffsets: Map[TopicPartition, OffsetSpec],
       options: Option[ListOffsetsOptions]
     ): Task[Map[TopicPartition, Task[ListOffsetsResultInfo]]] = {
-      val asJava                = topicPartitionOffsets.bimap(_.asJava, _.asJava).asJava
-      val topicPartitionsAsJava = topicPartitionOffsets.keySet.map(_.asJava)
+      val topicPartitionOffsetsAsJava = topicPartitionOffsets.bimap(_.asJava, _.asJava)
+      val topicPartitionsAsJava       = topicPartitionOffsetsAsJava.keySet
+      val asJava                      = topicPartitionOffsetsAsJava.asJava
       blocking.effectBlocking {
         val listOffsetsResult = options
           .fold(adminClient.listOffsets(asJava))(opts => adminClient.listOffsets(asJava, opts.asJava))
