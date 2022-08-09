@@ -15,6 +15,7 @@ import org.apache.kafka.clients.admin.{
   DescribeClusterOptions => JDescribeClusterOptions,
   DescribeConfigsOptions => JDescribeConfigsOptions,
   DescribeTopicsOptions => JDescribeTopicsOptions,
+  DescribeConsumerGroupsOptions => JDescribeConsumerGroupsOptions,
   ListConsumerGroupOffsetsOptions => JListConsumerGroupOffsetsOptions,
   ListConsumerGroupsOptions => JListConsumerGroupsOptions,
   ListOffsetsOptions => JListOffsetsOptions,
@@ -200,6 +201,14 @@ trait AdminClient {
    * Describe the specified consumer groups.
    */
   def describeConsumerGroups(groupIds: String*): Task[Map[String, ConsumerGroupDescription]]
+
+  /**
+   * Describe the specified consumer groups.
+   */
+  def describeConsumerGroups(
+    groupIds: List[String],
+    options: Option[DescribeConsumerGroupsOptions]
+  ): Task[Map[String, ConsumerGroupDescription]]
 
   /**
    * Remove the specified members from a consumer group.
@@ -569,9 +578,22 @@ object AdminClient {
      * Describe the specified consumer groups.
      */
     override def describeConsumerGroups(groupIds: String*): Task[Map[String, ConsumerGroupDescription]] =
+      describeConsumerGroups(groupIds.toList, options = None)
+
+    /**
+     * Describe the specified consumer groups.
+     */
+    override def describeConsumerGroups(
+      groupIds: List[String],
+      options: Option[DescribeConsumerGroupsOptions]
+    ): Task[Map[String, ConsumerGroupDescription]] =
       fromKafkaFuture(
         ZIO.attemptBlocking(
-          adminClient.describeConsumerGroups(groupIds.asJavaCollection).all
+          options
+            .fold(adminClient.describeConsumerGroups(groupIds.asJavaCollection))(opts =>
+              adminClient.describeConsumerGroups(groupIds.asJavaCollection, opts.asJava)
+            )
+            .all
         )
       ).map(_.asScala.map { case (k, v) => k -> ConsumerGroupDescription(v) }.toMap)
 
@@ -823,6 +845,14 @@ object AdminClient {
     lazy val asJava: JDescribeClusterOptions = {
       val opts = new JDescribeClusterOptions().includeAuthorizedOperations(includeAuthorizedOperations)
       timeout.fold(opts)(timeout => opts.timeoutMs(timeout.toMillis.toInt))
+    }
+  }
+
+  final case class DescribeConsumerGroupsOptions(includeAuthorizedOperations: Boolean, timeout: Option[Duration]) {
+    lazy val asJava: JDescribeConsumerGroupsOptions = {
+      val jOpts = new JDescribeConsumerGroupsOptions()
+        .includeAuthorizedOperations(includeAuthorizedOperations)
+      timeout.fold(jOpts)(timeout => jOpts.timeoutMs(timeout.toMillis.toInt))
     }
   }
 
