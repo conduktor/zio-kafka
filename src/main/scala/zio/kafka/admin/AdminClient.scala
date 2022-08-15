@@ -2,7 +2,7 @@ package zio.kafka.admin
 
 import org.apache.kafka.clients.admin.ListOffsetsResult.{ ListOffsetsResultInfo => JListOffsetsResultInfo }
 import org.apache.kafka.clients.admin.{
-  AdminClient => JAdminClient,
+  Admin => JAdmin,
   AlterConsumerGroupOffsetsOptions => JAlterConsumerGroupOffsetsOptions,
   Config => JConfig,
   ConsumerGroupDescription => JConsumerGroupDescription,
