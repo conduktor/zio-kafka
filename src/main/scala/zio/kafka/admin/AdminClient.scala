@@ -2,7 +2,7 @@ package zio.kafka.admin
 
 import org.apache.kafka.clients.admin.ListOffsetsResult.{ ListOffsetsResultInfo => JListOffsetsResultInfo }
 import org.apache.kafka.clients.admin.{
-  AdminClient => JAdminClient,
+  Admin => JAdmin,
   AlterConsumerGroupOffsetsOptions => JAlterConsumerGroupOffsetsOptions,
   Config => JConfig,
   ConsumerGroupDescription => JConsumerGroupDescription,
@@ -238,7 +238,7 @@ object AdminClient {
    * @param adminClient
    */
   private final class LiveAdminClient(
-    private val adminClient: JAdminClient
+    private val adminClient: JAdmin,
   ) extends AdminClient {
 
     /**
@@ -1119,20 +1119,20 @@ object AdminClient {
   def make(settings: AdminClientSettings): ZIO[Scope, Throwable, AdminClient] =
     fromManagedJavaClient(javaClientFromSettings(settings))
 
-  def fromJavaClient(javaClient: JAdminClient): URIO[Any, AdminClient] =
-    ZIO.succeed(new LiveAdminClient(javaClient))
+  def fromJavaClient(javaClient: JAdmin): URIO[Blocking, AdminClient] =
+    ZIO.service[Blocking.Service].map { blocking =>
+      new LiveAdminClient(javaClient, blocking)
+    }
 
   def fromManagedJavaClient[R, E](
-    managedJavaClient: ZIO[R with Scope, E, JAdminClient]
-  ): ZIO[R with Scope, E, AdminClient] =
+    managedJavaClient: ZManaged[R, E, JAdmin]
+  ): ZManaged[Blocking & R, E, AdminClient] =
     managedJavaClient.flatMap { javaClient =>
       fromJavaClient(javaClient)
     }
 
-  def javaClientFromSettings(settings: AdminClientSettings): ZIO[Scope, Throwable, JAdminClient] =
-    ZIO.acquireRelease(ZIO.attempt(JAdminClient.create(settings.driverSettings.asJava)))(client =>
-      ZIO.succeed(client.close(settings.closeTimeout))
-    )
+  def javaClientFromSettings(settings: AdminClientSettings): ZManaged[Any, Throwable, JAdmin] =
+    ZManaged.makeEffect(JAdmin.create(settings.driverSettings.asJava))(_.close(settings.closeTimeout))
 
   implicit class MapOps[K1, V1](val v: Map[K1, V1]) extends AnyVal {
     def bimap[K2, V2](fk: K1 => K2, fv: V1 => V2): Map[K2, V2] = v.map(kv => fk(kv._1) -> fv(kv._2))
