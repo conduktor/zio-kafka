@@ -83,7 +83,7 @@ object TransactionalProducer {
       )(_.close(settings.producerSettings.closeTimeout))
     )
 
-  def fromJavaProducer(javaProducer: JProducer[Array[Byte], Array[Byte]]): RIO[Blocking, TransactionalProducer] =
+  def fromJavaProducer(javaProducer: => JProducer[Array[Byte], Array[Byte]]): RIO[Blocking, TransactionalProducer] =
     for {
       blocking  <- ZIO.service[Blocking.Service]
       _         <- blocking.effectBlocking(javaProducer.initTransactions())

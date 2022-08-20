@@ -261,7 +261,7 @@ object Producer {
       )(_.close(settings.closeTimeout))
     )
 
-  def fromJavaProducer(javaProducer: JProducer[Array[Byte], Array[Byte]]): URIO[Blocking, Producer] =
+  def fromJavaProducer(javaProducer: => JProducer[Array[Byte], Array[Byte]]): URIO[Blocking, Producer] =
     ZIO.service[Blocking.Service].map(Live(javaProducer, _))
 
   def fromManagedJavaProducer[R, E](
