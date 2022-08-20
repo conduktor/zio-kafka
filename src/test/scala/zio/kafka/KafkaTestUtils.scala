@@ -24,7 +24,7 @@ object KafkaTestUtils {
   val producer: ZLayer[Has[Kafka] with Blocking, Throwable, Has[Producer]] =
     (ZLayer.fromEffect(producerSettings) ++ ZLayer.succeed(Serde.string: Serializer[Any, String])) ++ ZLayer
       .identity[Blocking] >>>
-      Producer.live
+      Producer.live()
 
   val transactionalProducerSettings: ZIO[Has[Kafka], Nothing, TransactionalProducerSettings] =
     ZIO.access[Has[Kafka]](_.get[Kafka].bootstrapServers).map(TransactionalProducerSettings(_, "test-transaction"))
@@ -34,7 +34,7 @@ object KafkaTestUtils {
       Serde.string: Serializer[Any, String]
     )) ++ ZLayer
       .identity[Blocking] >>>
-      TransactionalProducer.live
+      TransactionalProducer.live()
 
   def produceOne(
     topic: String,

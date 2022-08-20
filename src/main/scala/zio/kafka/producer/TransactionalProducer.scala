@@ -66,21 +66,28 @@ object TransactionalProducer {
   def createTransaction: RManaged[Has[TransactionalProducer], Transaction] =
     ZManaged.service[TransactionalProducer].flatMap(_.createTransaction)
 
-  val live: RLayer[Has[TransactionalProducerSettings] with Blocking, Has[TransactionalProducer]] =
+  def live(
+    tuneProducer: KafkaProducer[Array[Byte], Array[Byte]] => KafkaProducer[Array[Byte], Array[Byte]] = identity
+  ): RLayer[Has[TransactionalProducerSettings] with Blocking, Has[TransactionalProducer]] =
     (for {
       settings <- ZManaged.service[TransactionalProducerSettings]
-      producer <- make(settings)
+      producer <- make(settings, tuneProducer)
     } yield producer).toLayer
 
-  def make(settings: TransactionalProducerSettings): RManaged[Blocking, TransactionalProducer] =
+  def make(
+    settings: TransactionalProducerSettings,
+    tuneProducer: KafkaProducer[Array[Byte], Array[Byte]] => KafkaProducer[Array[Byte], Array[Byte]] = identity
+  ): RManaged[Blocking, TransactionalProducer] =
     (for {
       props    <- ZIO.effect(settings.producerSettings.driverSettings)
       blocking <- ZIO.service[Blocking.Service]
       rawProducer <- ZIO.effect(
-                       new KafkaProducer[Array[Byte], Array[Byte]](
-                         props.asJava,
-                         new ByteArraySerializer(),
-                         new ByteArraySerializer()
+                       tuneProducer(
+                         new KafkaProducer[Array[Byte], Array[Byte]](
+                           props.asJava,
+                           new ByteArraySerializer(),
+                           new ByteArraySerializer()
+                         )
                        )
                      )
       _         <- blocking.effectBlocking(rawProducer.initTransactions())

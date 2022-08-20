@@ -617,11 +617,15 @@ object AdminClient extends Accessible[AdminClient] {
         )
   }
 
-  val live: ZLayer[Has[Blocking.Service] with Has[AdminClientSettings], Throwable, Has[AdminClient]] =
-    (for {
-      settings <- ZManaged.service[AdminClientSettings]
-      admin    <- make(settings)
-    } yield admin).toLayer
+  def live(
+    tuneClient: JAdmin => JAdmin = identity
+  ): ZLayer[Has[Blocking.Service] with Has[AdminClientSettings], Throwable, Has[AdminClient]] =
+    (
+      for {
+        settings <- ZManaged.service[AdminClientSettings]
+        admin    <- make(settings, tuneClient)
+      } yield admin
+    ).toLayer
 
   def fromKafkaFuture[R, T](kfv: RIO[R, KafkaFuture[T]]): RIO[R, T] =
     kfv.flatMap(f => ZIO.fromCompletionStage(f.toCompletionStage))
@@ -1033,8 +1037,11 @@ object AdminClient extends Accessible[AdminClient] {
     def apply(ri: JReplicaInfo): ReplicaInfo = ReplicaInfo(ri.size(), ri.offsetLag(), ri.isFuture)
   }
 
-  def make(settings: AdminClientSettings): ZManaged[Blocking, Throwable, AdminClient] =
-    fromManagedJavaClient(javaClientFromSettings(settings))
+  def make(
+    settings: AdminClientSettings,
+    tuneClient: JAdmin => JAdmin = identity
+  ): ZManaged[Blocking, Throwable, AdminClient] =
+    fromManagedJavaClient(javaClientFromSettings(settings, tuneClient))
 
   def fromJavaClient(javaClient: JAdmin): URIO[Blocking, AdminClient] =
     ZIO.service[Blocking.Service].map { blocking =>
@@ -1048,8 +1055,11 @@ object AdminClient extends Accessible[AdminClient] {
       ZManaged.fromEffect(fromJavaClient(javaClient))
     }
 
-  def javaClientFromSettings(settings: AdminClientSettings): ZManaged[Any, Throwable, JAdmin] =
-    ZManaged.makeEffect(JAdmin.create(settings.driverSettings.asJava))(_.close(settings.closeTimeout))
+  def javaClientFromSettings(
+    settings: AdminClientSettings,
+    tuneClient: JAdmin => JAdmin = identity
+  ): ZManaged[Any, Throwable, JAdmin] =
+    ZManaged.makeEffect(tuneClient(JAdmin.create(settings.driverSettings.asJava)))(_.close(settings.closeTimeout))
 
   implicit class MapOps[K1, V1](val v: Map[K1, V1]) extends AnyVal {
     def bimap[K2, V2](fk: K1 => K2, fv: V1 => V2) = v.map(kv => fk(kv._1) -> fv(kv._2))
