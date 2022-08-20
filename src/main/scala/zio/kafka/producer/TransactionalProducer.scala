@@ -1,13 +1,13 @@
 package zio.kafka.producer
 
 import org.apache.kafka.clients.consumer.OffsetAndMetadata
-import org.apache.kafka.clients.producer.KafkaProducer
+import org.apache.kafka.clients.producer.{ KafkaProducer, Producer => JProducer }
 import org.apache.kafka.common.errors.InvalidGroupIdException
 import org.apache.kafka.common.serialization.ByteArraySerializer
 import zio.Cause.Fail
 import zio.blocking.Blocking
 import zio.kafka.consumer.OffsetBatch
-import zio.{ Exit, Has, RLayer, RManaged, Ref, Semaphore, Task, UIO, ZManaged }
+import zio.{ Exit, Has, RIO, RLayer, RManaged, Ref, Semaphore, Task, UIO, ZIO, ZManaged }
 
 import scala.jdk.CollectionConverters._
 
@@ -73,17 +73,27 @@ object TransactionalProducer {
     } yield producer).toLayer
 
   def make(settings: TransactionalProducerSettings): RManaged[Blocking, TransactionalProducer] =
+    fromManagedJavaProducer(
+      ZManaged.makeEffect(
+        new KafkaProducer[Array[Byte], Array[Byte]](
+          settings.producerSettings.driverSettings.asJava,
+          new ByteArraySerializer(),
+          new ByteArraySerializer()
+        )
+      )(_.close(settings.producerSettings.closeTimeout))
+    )
+
+  def fromJavaProducer(javaProducer: JProducer[Array[Byte], Array[Byte]]): RIO[Blocking, TransactionalProducer] =
     for {
-      blocking <- ZManaged.service[Blocking.Service]
-      rawProducer <- ZManaged.makeEffect(
-                       new KafkaProducer[Array[Byte], Array[Byte]](
-                         settings.producerSettings.driverSettings.asJava,
-                         new ByteArraySerializer(),
-                         new ByteArraySerializer()
-                       )
-                     )(_.close(settings.producerSettings.closeTimeout))
-      _         <- blocking.effectBlocking(rawProducer.initTransactions()).toManaged_
-      semaphore <- Semaphore.make(1).toManaged_
-      live = Producer.Live(rawProducer, blocking)
+      blocking  <- ZIO.service[Blocking.Service]
+      _         <- blocking.effectBlocking(javaProducer.initTransactions())
+      semaphore <- Semaphore.make(1)
+      live = Producer.Live(javaProducer, blocking)
     } yield LiveTransactionalProducer(live, blocking, semaphore)
+
+  def fromManagedJavaProducer[R](
+    managedJavaProducer: ZManaged[R, Throwable, JProducer[Array[Byte], Array[Byte]]]
+  ): ZManaged[R with Blocking, Throwable, TransactionalProducer] =
+    managedJavaProducer.flatMap(javaProducer => ZManaged.fromEffect(fromJavaProducer(javaProducer)))
+
 }

@@ -266,7 +266,7 @@ object Producer {
 
   def fromManagedJavaProducer[R, E](
     managedJavaProducer: ZManaged[R, E, JProducer[Array[Byte], Array[Byte]]]
-  ): ZManaged[Blocking & R, E, Producer] =
+  ): ZManaged[R with Blocking, E, Producer] =
     managedJavaProducer.flatMap(javaProducer => ZManaged.fromEffect(fromJavaProducer(javaProducer)))
 
   def withProducerService[R, A](
