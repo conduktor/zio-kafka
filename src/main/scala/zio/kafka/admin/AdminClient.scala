@@ -1030,7 +1030,8 @@ object AdminClient extends Accessible[AdminClient] {
   final case class ReplicaInfo(size: Long, offsetLag: Long, isFuture: Boolean)
 
   object ReplicaInfo {
-    def apply(ri: JReplicaInfo): ReplicaInfo = ReplicaInfo(ri.size(), ri.offsetLag(), ri.isFuture)
+    def apply(ri: JReplicaInfo): ReplicaInfo =
+      ReplicaInfo(size = ri.size(), offsetLag = ri.offsetLag(), isFuture = ri.isFuture)
   }
 
   def make(settings: AdminClientSettings): ZManaged[Blocking, Throwable, AdminClient] =
@@ -1051,15 +1052,15 @@ object AdminClient extends Accessible[AdminClient] {
   def javaClientFromSettings(settings: AdminClientSettings): ZManaged[Any, Throwable, JAdmin] =
     ZManaged.makeEffect(JAdmin.create(settings.driverSettings.asJava))(_.close(settings.closeTimeout))
 
-  implicit class MapOps[K1, V1](val v: Map[K1, V1]) extends AnyVal {
-    def bimap[K2, V2](fk: K1 => K2, fv: V1 => V2) = v.map(kv => fk(kv._1) -> fv(kv._2))
+  implicit final class MapOps[K1, V1](private val v: Map[K1, V1]) extends AnyVal {
+    def bimap[K2, V2](fk: K1 => K2, fv: V1 => V2): Map[K2, V2] = v.map(kv => fk(kv._1) -> fv(kv._2))
   }
 
-  implicit class OptionalOps[T](val v: Optional[T]) extends AnyVal {
-    def toScala = if (v.isPresent) Some(v.get()) else None
+  implicit final class OptionalOps[T](private val v: Optional[T]) extends AnyVal {
+    def toScala: Option[T] = if (v.isPresent) Some(v.get()) else None
   }
 
-  implicit class OptionOps[T](val v: Option[T]) extends AnyVal {
-    def toJava = v.fold(Optional.empty[T])(Optional.of)
+  implicit final class OptionOps[T](private val v: Option[T]) extends AnyVal {
+    def toJava: Optional[T] = v.fold(Optional.empty[T])(Optional.of)
   }
 }
