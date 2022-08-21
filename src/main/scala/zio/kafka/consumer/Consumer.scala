@@ -333,13 +333,7 @@ object Consumer {
     settings: ConsumerSettings,
     diagnostics: Diagnostics = Diagnostics.NoOp
   ): RManaged[Clock with Blocking, Consumer] =
-    fromJavaConsumer(
-      new KafkaConsumer[Array[Byte], Array[Byte]](
-        settings.driverSettings.asJava,
-        new ByteArrayDeserializer(),
-        new ByteArrayDeserializer()
-      )
-    )(settings, diagnostics)
+    fromManagedJavaProducer(javaConsumerFromSettings(settings))(settings, diagnostics)
 
   def fromJavaConsumer(javaConsumer: => JConsumer[Array[Byte], Array[Byte]])(
     settings: ConsumerSettings,
@@ -371,6 +365,17 @@ object Consumer {
         reservation.acquire.map(fromJavaConsumer(_)(settings, diagnostics))
       }
     }
+
+  def javaConsumerFromSettings(
+    settings: ConsumerSettings
+  ): ZManaged[Any, Throwable, JConsumer[Array[Byte], Array[Byte]]] =
+    ZManaged.makeEffect(
+      new KafkaConsumer[Array[Byte], Array[Byte]](
+        settings.driverSettings.asJava,
+        new ByteArrayDeserializer(),
+        new ByteArrayDeserializer()
+      )
+    )(_.close(settings.closeTimeout))
 
   /**
    * Accessor method for [[Consumer.assignment]]

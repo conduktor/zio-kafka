@@ -1,9 +1,8 @@
 package zio.kafka.producer
 
 import org.apache.kafka.clients.consumer.OffsetAndMetadata
-import org.apache.kafka.clients.producer.{ KafkaProducer, Producer => JProducer }
+import org.apache.kafka.clients.producer.{ Producer => JProducer }
 import org.apache.kafka.common.errors.InvalidGroupIdException
-import org.apache.kafka.common.serialization.ByteArraySerializer
 import zio.Cause.Fail
 import zio.blocking.Blocking
 import zio.kafka.consumer.OffsetBatch
@@ -73,15 +72,7 @@ object TransactionalProducer {
     } yield producer).toLayer
 
   def make(settings: TransactionalProducerSettings): RManaged[Blocking, TransactionalProducer] =
-    fromManagedJavaProducer(
-      ZManaged.makeEffect(
-        new KafkaProducer[Array[Byte], Array[Byte]](
-          settings.producerSettings.driverSettings.asJava,
-          new ByteArraySerializer(),
-          new ByteArraySerializer()
-        )
-      )(_.close(settings.producerSettings.closeTimeout))
-    )
+    fromManagedJavaProducer(Producer.javaProducerFromSettings(settings.producerSettings))
 
   def fromJavaProducer(javaProducer: => JProducer[Array[Byte], Array[Byte]]): RIO[Blocking, TransactionalProducer] =
     for {
