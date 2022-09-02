@@ -1092,8 +1092,8 @@ object AdminClient extends Accessible[AdminClient] {
           case Nil => Success(acc.toList)
           case h :: t =>
             f(h) match {
-              case f @ Failure(_) => f.asInstanceOf[Try[List[B]]]
-              case Success(b)     => loop(acc += b, t)
+              case Success(b)        => loop(acc += b, t)
+              case fail @ Failure(_) => fail.asInstanceOf[Try[List[B]]]
             }
         }
 
