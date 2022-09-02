@@ -14,8 +14,8 @@ import org.apache.kafka.clients.admin.{
   DeleteTopicsOptions => JDeleteTopicsOptions,
   DescribeClusterOptions => JDescribeClusterOptions,
   DescribeConfigsOptions => JDescribeConfigsOptions,
-  DescribeTopicsOptions => JDescribeTopicsOptions,
   DescribeConsumerGroupsOptions => JDescribeConsumerGroupsOptions,
+  DescribeTopicsOptions => JDescribeTopicsOptions,
   ListConsumerGroupOffsetsOptions => JListConsumerGroupOffsetsOptions,
   ListConsumerGroupsOptions => JListConsumerGroupsOptions,
   ListOffsetsOptions => JListOffsetsOptions,
@@ -241,7 +241,7 @@ object AdminClient {
    * @param adminClient
    */
   private final class LiveAdminClient(
-    private val adminClient: JAdminClient
+    private val adminClient: JAdmin
   ) extends AdminClient {
 
     /**
@@ -354,7 +354,7 @@ object AdminClient {
             .allTopicNames()
         )
       }.flatMap { jTopicDescriptions =>
-        Task.fromTry {
+        ZIO.fromTry {
           jTopicDescriptions.asScala.toList.forEach { case (k, v) => AdminClient.TopicDescription(v).map(k -> _) }
             .map(_.toMap)
         }
@@ -390,8 +390,8 @@ object AdminClient {
       options: Option[DescribeConfigsOptions] = None
     ): Task[Map[ConfigResource, Task[KafkaConfig]]] = {
       val asJava = configResources.map(_.asJava).asJavaCollection
-      blocking
-        .effectBlocking(
+      ZIO
+        .attemptBlocking(
           options
             .fold(adminClient.describeConfigs(asJava))(opts => adminClient.describeConfigs(asJava, opts.asJava))
             .values()
@@ -502,7 +502,7 @@ object AdminClient {
       val topicPartitionOffsetsAsJava = topicPartitionOffsets.bimap(_.asJava, _.asJava)
       val topicPartitionsAsJava       = topicPartitionOffsetsAsJava.keySet
       val asJava                      = topicPartitionOffsetsAsJava.asJava
-      blocking.effectBlocking {
+      ZIO.attemptBlocking {
         val listOffsetsResult = options
           .fold(adminClient.listOffsets(asJava))(opts => adminClient.listOffsets(asJava, opts.asJava))
         topicPartitionsAsJava.map(tp => tp -> listOffsetsResult.partitionResult(tp))
@@ -630,8 +630,8 @@ object AdminClient {
     override def describeLogDirsAsync(
       brokersId: Iterable[Int]
     ): ZIO[Any, Throwable, Map[Int, Task[Map[String, LogDirDescription]]]] =
-      blocking
-        .effectBlocking(
+      ZIO
+        .attemptBlocking(
           adminClient.describeLogDirs(brokersId.map(Int.box).asJavaCollection).descriptions()
         )
         .map(
@@ -1147,14 +1147,14 @@ object AdminClient {
     ZIO.succeed(new LiveAdminClient(javaClient))
 
   def fromManagedJavaClient[R, E](
-    managedJavaClient: ZIO[R with Scope, E, JAdminClient]
+    managedJavaClient: ZIO[R with Scope, E, JAdmin]
   ): ZIO[R with Scope, E, AdminClient] =
     managedJavaClient.flatMap { javaClient =>
       fromJavaClient(javaClient)
     }
 
-  def javaClientFromSettings(settings: AdminClientSettings): ZIO[Scope, Throwable, JAdminClient] =
-    ZIO.acquireRelease(ZIO.attempt(JAdminClient.create(settings.driverSettings.asJava)))(client =>
+  def javaClientFromSettings(settings: AdminClientSettings): ZIO[Scope, Throwable, JAdmin] =
+    ZIO.acquireRelease(ZIO.attempt(JAdmin.create(settings.driverSettings.asJava)))(client =>
       ZIO.succeed(client.close(settings.closeTimeout))
     )
 

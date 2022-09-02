@@ -71,20 +71,19 @@ object TransactionalProducer {
       } yield producer
     }
 
-  def make(settings: TransactionalProducerSettings): RManaged[Blocking, TransactionalProducer] =
+  def make(settings: TransactionalProducerSettings): RIO[Scope, TransactionalProducer] =
     fromManagedJavaProducer(Producer.javaProducerFromSettings(settings.producerSettings))
 
-  def fromJavaProducer(javaProducer: => JProducer[Array[Byte], Array[Byte]]): RIO[Blocking, TransactionalProducer] =
+  def fromJavaProducer(javaProducer: => JProducer[Array[Byte], Array[Byte]]): Task[TransactionalProducer] =
     for {
-      blocking  <- ZIO.service[Blocking.Service]
-      _         <- blocking.effectBlocking(javaProducer.initTransactions())
+      _         <- ZIO.attemptBlocking(javaProducer.initTransactions())
       semaphore <- Semaphore.make(1)
-      live = Producer.Live(javaProducer, blocking)
-    } yield LiveTransactionalProducer(live, blocking, semaphore)
+      live = Producer.Live(javaProducer)
+    } yield LiveTransactionalProducer(live, semaphore)
 
   def fromManagedJavaProducer[R](
-    managedJavaProducer: ZManaged[R, Throwable, JProducer[Array[Byte], Array[Byte]]]
-  ): ZManaged[R with Blocking, Throwable, TransactionalProducer] =
-    managedJavaProducer.flatMap(javaProducer => ZManaged.fromEffect(fromJavaProducer(javaProducer)))
+    managedJavaProducer: ZIO[R & Scope, Throwable, JProducer[Array[Byte], Array[Byte]]]
+  ): ZIO[R & Scope, Throwable, TransactionalProducer] =
+    managedJavaProducer.flatMap(javaProducer => fromJavaProducer(javaProducer))
 
 }
