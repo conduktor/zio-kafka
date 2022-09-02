@@ -14,7 +14,8 @@ trait RebalanceConsumer {
 }
 
 object RebalanceConsumer {
-  final case class Live(consumer: JConsumer[Array[Byte], Array[Byte]]) extends RebalanceConsumer {
+  final case class Live(consumer: JConsumer[Array[Byte], Array[Byte]])
+      extends RebalanceConsumer {
     def commit(offsets: Map[TopicPartition, OffsetAndMetadata]): Task[Unit] =
       ZIO.attemptBlocking(consumer.commitSync(offsets.asJava))
   }

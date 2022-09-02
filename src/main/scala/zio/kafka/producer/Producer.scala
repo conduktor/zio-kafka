@@ -250,21 +250,27 @@ object Producer {
       } yield producer
     }
 
-  def make(settings: ProducerSettings): ZIO[Scope, Throwable, Producer] =
-    ZIO.acquireRelease {
-      for {
-        props <- ZIO.attempt(settings.driverSettings)
-        rawProducer <- ZIO.attempt(
-                         new KafkaProducer[Array[Byte], Array[Byte]](
-                           props.asJava,
-                           new ByteArraySerializer(),
-                           new ByteArraySerializer()
-                         )
-                       )
-      } yield Live(rawProducer, settings)
-    } { producer =>
-      producer.close
-    }
+  def make(settings: ProducerSettings): RManaged[Blocking, Producer] =
+    fromManagedJavaProducer(javaProducerFromSettings(settings))
+
+  def fromJavaProducer(javaProducer: => JProducer[Array[Byte], Array[Byte]]): URIO[Blocking, Producer] =
+    ZIO.service[Blocking.Service].map(Live(javaProducer, _))
+
+  def fromManagedJavaProducer[R, E](
+    managedJavaProducer: ZManaged[R, E, JProducer[Array[Byte], Array[Byte]]]
+  ): ZManaged[R with Blocking, E, Producer] =
+    managedJavaProducer.flatMap(javaProducer => ZManaged.fromEffect(fromJavaProducer(javaProducer)))
+
+  def javaProducerFromSettings(
+    settings: ProducerSettings
+  ): ZManaged[Any, Throwable, JProducer[Array[Byte], Array[Byte]]] =
+    ZManaged.makeEffect(
+      new KafkaProducer[Array[Byte], Array[Byte]](
+        settings.driverSettings.asJava,
+        new ByteArraySerializer(),
+        new ByteArraySerializer()
+      )
+    )(_.close(settings.closeTimeout))
 
   def withProducerService[R, A](
     r: Producer => RIO[R, A]

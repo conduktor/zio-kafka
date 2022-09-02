@@ -1143,10 +1143,8 @@ object AdminClient {
   def make(settings: AdminClientSettings): ZIO[Scope, Throwable, AdminClient] =
     fromManagedJavaClient(javaClientFromSettings(settings))
 
-  def fromJavaClient(javaClient: JAdmin): URIO[Blocking, AdminClient] =
-    ZIO.service[Blocking.Service].map { blocking =>
-      new LiveAdminClient(javaClient, blocking)
-    }
+  def fromJavaClient(javaClient: => JAdmin): URIO[Blocking, AdminClient] =
+    ZIO.service[Blocking.Service].map(new LiveAdminClient(javaClient, _))
 
   def fromManagedJavaClient[R, E](
     managedJavaClient: ZManaged[R, E, JAdmin]
