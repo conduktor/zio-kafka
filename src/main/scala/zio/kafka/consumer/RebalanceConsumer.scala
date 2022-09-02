@@ -4,6 +4,8 @@ import org.apache.kafka.clients.consumer.{ Consumer => JConsumer, OffsetAndMetad
 import org.apache.kafka.common.TopicPartition
 import zio.{ Task, ZIO }
 
+import zio.Task
+
 import scala.jdk.CollectionConverters._
 
 /**

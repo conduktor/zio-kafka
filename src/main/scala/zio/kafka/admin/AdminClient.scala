@@ -1143,7 +1143,7 @@ object AdminClient {
   def make(settings: AdminClientSettings): ZIO[Scope, Throwable, AdminClient] =
     fromManagedJavaClient(javaClientFromSettings(settings))
 
-  def fromJavaClient(javaClient: JAdminClient): URIO[Any, AdminClient] =
+  def fromJavaClient(javaClient: JAdmin): URIO[Any, AdminClient] =
     ZIO.succeed(new LiveAdminClient(javaClient))
 
   def fromManagedJavaClient[R, E](
