@@ -110,7 +110,6 @@ object AdminSpec extends ZIOSpecWithKafka {
             list3 <- listTopicsFiltered(client)
           } yield assert(list1.size)(equalTo(0)) &&
             assert(configs.size)(equalTo(2)) &&
-            assert(awaitedConfigsAsync.size)(equalTo(2)) &&
             assert(list3.size)(equalTo(0))
         }
       },
