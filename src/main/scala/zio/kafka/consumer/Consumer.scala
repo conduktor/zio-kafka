@@ -348,13 +348,13 @@ object Consumer {
   def make(
     settings: ConsumerSettings,
     diagnostics: Diagnostics = Diagnostics.NoOp
-  ): RManaged[Clock with Blocking, Consumer] =
+  ): RIO[Scope, Consumer] =
     fromManagedJavaProducer(javaConsumerFromSettings(settings))(settings, diagnostics)
 
   def fromJavaConsumer(javaConsumer: => JConsumer[Array[Byte], Array[Byte]])(
     settings: ConsumerSettings,
     diagnostics: Diagnostics = Diagnostics.NoOp
-  ): RManaged[Clock with Blocking, Consumer] =
+  ): RIO[Scope, Consumer] =
     for {
       wrapper <- ConsumerAccess.fromJavaConsumer(javaConsumer, settings.closeTimeout)
       runloop <- Runloop(
@@ -369,28 +369,30 @@ object Consumer {
     } yield Live(wrapper, settings, runloop)
 
   def fromManagedJavaProducer[R](
-    managedJavaConsumer: ZManaged[R, Throwable, JConsumer[Array[Byte], Array[Byte]]]
+    managedJavaConsumer: ZIO[R & Scope, Throwable, JConsumer[Array[Byte], Array[Byte]]]
   )(
     settings: ConsumerSettings,
     diagnostics: Diagnostics = Diagnostics.NoOp
-  ): ZManaged[Clock with Blocking with R, Throwable, Consumer] =
+  ): ZIO[R & Scope, Throwable, Consumer] =
     // Here, we "forget" the finalizer of the provided managed instance because we'll close the Consumer it contains by ourselves in the ConsumerAccess.
-    ZManaged.unwrap {
-      managedJavaConsumer.reserve.flatMap { reservation =>
-        reservation.acquire.map(fromJavaConsumer(_)(settings, diagnostics))
+    ZIO.scopeWith { parent =>
+      Scope.make.flatMap(_.extend[R](managedJavaConsumer)).flatMap { consumer =>
+        parent.fork.flatMap(_.extend[R](fromJavaConsumer(consumer)(settings, diagnostics)))
       }
     }
 
   def javaConsumerFromSettings(
     settings: ConsumerSettings
-  ): ZManaged[Any, Throwable, JConsumer[Array[Byte], Array[Byte]]] =
-    ZManaged.makeEffect(
-      new KafkaConsumer[Array[Byte], Array[Byte]](
-        settings.driverSettings.asJava,
-        new ByteArrayDeserializer(),
-        new ByteArrayDeserializer()
+  ): ZIO[Scope, Throwable, JConsumer[Array[Byte], Array[Byte]]] =
+    ZIO.acquireRelease(
+      ZIO.attempt(
+        new KafkaConsumer[Array[Byte], Array[Byte]](
+          settings.driverSettings.asJava,
+          new ByteArrayDeserializer(),
+          new ByteArrayDeserializer()
+        )
       )
-    )(_.close(settings.closeTimeout))
+    )(c => ZIO.attempt(c.close(settings.closeTimeout)).orDie)
 
   /**
    * Accessor method for [[Consumer.assignment]]

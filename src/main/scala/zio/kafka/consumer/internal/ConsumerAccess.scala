@@ -1,9 +1,8 @@
 package zio.kafka.consumer.internal
 
-import org.apache.kafka.clients.consumer.{ Consumer => JConsumer, KafkaConsumer }
+import org.apache.kafka.clients.consumer.{ Consumer => JConsumer }
 import org.apache.kafka.common.errors.WakeupException
 import zio._
-import zio.kafka.consumer.ConsumerSettings
 import zio.kafka.consumer.internal.ConsumerAccess.ByteArrayKafkaConsumer
 
 private[consumer] class ConsumerAccess(
@@ -25,7 +24,7 @@ private[consumer] class ConsumerAccess(
         ZIO.interrupt
       }
       .fork
-      .flatMap(fib => fib.join.onInterrupt(ZIO.effectTotal(consumer.wakeup()) *> fib.interrupt))
+      .flatMap(fib => fib.join.onInterrupt(ZIO.succeed(consumer.wakeup()) *> fib.interrupt))
 
 }
 
@@ -35,12 +34,11 @@ private[consumer] object ConsumerAccess {
   def fromJavaConsumer(
     javaConsumer: => ByteArrayKafkaConsumer,
     closeTimeout: Duration
-  ): RManaged[Blocking, ConsumerAccess] =
+  ): RIO[Scope, ConsumerAccess] =
     for {
-      access   <- Semaphore.make(1).toManaged_
-      blocking <- ZManaged.service[Blocking.Service]
-      consumer <- blocking
-                    .effectBlocking(javaConsumer)
-                    .toManaged(c => blocking.blocking(access.withPermit(UIO(c.close(closeTimeout)))))
-    } yield new ConsumerAccess(consumer, access, blocking)
+      access <- Semaphore.make(1)
+      consumer <- ZIO.acquireRelease(ZIO.attemptBlocking(javaConsumer))(c =>
+                    access.withPermit(ZIO.attemptBlocking(c.close(closeTimeout))).orDie
+                  )
+    } yield new ConsumerAccess(consumer, access)
 }

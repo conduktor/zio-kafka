@@ -14,8 +14,8 @@ import org.apache.kafka.clients.admin.{
   DeleteTopicsOptions => JDeleteTopicsOptions,
   DescribeClusterOptions => JDescribeClusterOptions,
   DescribeConfigsOptions => JDescribeConfigsOptions,
-  DescribeTopicsOptions => JDescribeTopicsOptions,
   DescribeConsumerGroupsOptions => JDescribeConsumerGroupsOptions,
+  DescribeTopicsOptions => JDescribeTopicsOptions,
   ListConsumerGroupOffsetsOptions => JListConsumerGroupOffsetsOptions,
   ListConsumerGroupsOptions => JListConsumerGroupsOptions,
   ListOffsetsOptions => JListOffsetsOptions,
@@ -241,7 +241,7 @@ object AdminClient {
    * @param adminClient
    */
   private final class LiveAdminClient(
-    private val adminClient: JAdmin,
+    private val adminClient: JAdmin
   ) extends AdminClient {
 
     /**
@@ -354,7 +354,7 @@ object AdminClient {
             .allTopicNames()
         )
       }.flatMap { jTopicDescriptions =>
-        Task.fromTry {
+        ZIO.fromTry {
           jTopicDescriptions.asScala.toList.forEach { case (k, v) => AdminClient.TopicDescription(v).map(k -> _) }
             .map(_.toMap)
         }
@@ -390,8 +390,8 @@ object AdminClient {
       options: Option[DescribeConfigsOptions] = None
     ): Task[Map[ConfigResource, Task[KafkaConfig]]] = {
       val asJava = configResources.map(_.asJava).asJavaCollection
-      blocking
-        .effectBlocking(
+      ZIO
+        .attemptBlocking(
           options
             .fold(adminClient.describeConfigs(asJava))(opts => adminClient.describeConfigs(asJava, opts.asJava))
             .values()
@@ -502,7 +502,7 @@ object AdminClient {
       val topicPartitionOffsetsAsJava = topicPartitionOffsets.bimap(_.asJava, _.asJava)
       val topicPartitionsAsJava       = topicPartitionOffsetsAsJava.keySet
       val asJava                      = topicPartitionOffsetsAsJava.asJava
-      blocking.effectBlocking {
+      ZIO.attemptBlocking {
         val listOffsetsResult = options
           .fold(adminClient.listOffsets(asJava))(opts => adminClient.listOffsets(asJava, opts.asJava))
         topicPartitionsAsJava.map(tp => tp -> listOffsetsResult.partitionResult(tp))
@@ -630,8 +630,8 @@ object AdminClient {
     override def describeLogDirsAsync(
       brokersId: Iterable[Int]
     ): ZIO[Any, Throwable, Map[Int, Task[Map[String, LogDirDescription]]]] =
-      blocking
-        .effectBlocking(
+      ZIO
+        .attemptBlocking(
           adminClient.describeLogDirs(brokersId.map(Int.box).asJavaCollection).descriptions()
         )
         .map(
@@ -1099,7 +1099,7 @@ object AdminClient {
   }
 
   final case class AlterConsumerGroupOffsetsOptions(timeout: Option[Duration]) {
-    def asJava:JAlterConsumerGroupOffsetsOptions = {
+    def asJava: JAlterConsumerGroupOffsetsOptions = {
       val options = new JAlterConsumerGroupOffsetsOptions()
       timeout.fold(options)(timeout => options.timeoutMs(timeout.toMillis.toInt))
     }
@@ -1143,18 +1143,20 @@ object AdminClient {
   def make(settings: AdminClientSettings): ZIO[Scope, Throwable, AdminClient] =
     fromManagedJavaClient(javaClientFromSettings(settings))
 
-  def fromJavaClient(javaClient: => JAdmin): URIO[Blocking, AdminClient] =
-    ZIO.service[Blocking.Service].map(new LiveAdminClient(javaClient, _))
+  def fromJavaClient(javaClient: => JAdmin): UIO[AdminClient] =
+    ZIO.succeed(new LiveAdminClient(javaClient))
 
   def fromManagedJavaClient[R, E](
-    managedJavaClient: ZManaged[R, E, JAdmin]
-  ): ZManaged[Blocking & R, E, AdminClient] =
+    managedJavaClient: ZIO[R & Scope, E, JAdmin]
+  ): ZIO[R & Scope, E, AdminClient] =
     managedJavaClient.flatMap { javaClient =>
       fromJavaClient(javaClient)
     }
 
-  def javaClientFromSettings(settings: AdminClientSettings): ZManaged[Any, Throwable, JAdmin] =
-    ZManaged.makeEffect(JAdmin.create(settings.driverSettings.asJava))(_.close(settings.closeTimeout))
+  def javaClientFromSettings(settings: AdminClientSettings): ZIO[Scope, Throwable, JAdmin] =
+    ZIO.acquireRelease(ZIO.attempt(JAdmin.create(settings.driverSettings.asJava)))(a =>
+      ZIO.attempt(a.close(settings.closeTimeout)).orDie
+    )
 
   implicit class MapOps[K1, V1](private val v: Map[K1, V1]) extends AnyVal {
     def bimap[K2, V2](fk: K1 => K2, fv: V1 => V2): Map[K2, V2] = v.map(kv => fk(kv._1) -> fv(kv._2))
@@ -1176,8 +1178,8 @@ object AdminClient {
           case Nil => Success(acc.toList)
           case h :: t =>
             f(h) match {
-              case Success(b) => loop(acc += b, t)
-              case fail@Failure(_) => fail.asInstanceOf[Try[List[B]]]
+              case Success(b)        => loop(acc += b, t)
+              case fail @ Failure(_) => fail.asInstanceOf[Try[List[B]]]
             }
         }
 
