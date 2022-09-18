@@ -654,6 +654,7 @@ object AdminClient {
       } yield admin
     }
 
+
   def fromKafkaFuture[R, T](kfv: RIO[R, KafkaFuture[T]]): RIO[R, T] =
     kfv.flatMap(f => ZIO.fromCompletionStage(f.toCompletionStage))
 
@@ -1169,6 +1170,7 @@ object AdminClient {
   implicit class OptionOps[T](private val v: Option[T]) extends AnyVal {
     def toJava: Optional[T] = v.fold(Optional.empty[T])(Optional.of)
   }
+
 
   implicit final class ListOps[A](private val list: List[A]) extends AnyVal {
     def forEach[B](f: A => Try[B]): Try[List[B]] = {

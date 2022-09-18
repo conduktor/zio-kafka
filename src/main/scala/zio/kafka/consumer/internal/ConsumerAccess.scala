@@ -26,6 +26,7 @@ private[consumer] class ConsumerAccess(
       .fork
       .flatMap(fib => fib.join.onInterrupt(ZIO.succeed(consumer.wakeup()) *> fib.interrupt))
 
+
 }
 
 private[consumer] object ConsumerAccess {

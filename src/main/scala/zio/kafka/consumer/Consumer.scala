@@ -394,6 +394,30 @@ object Consumer {
       )
     )(c => ZIO.attempt(c.close(settings.closeTimeout)).orDie)
 
+  def fromManagedJavaProducer[R](
+    managedJavaConsumer: ZManaged[R, Throwable, JConsumer[Array[Byte], Array[Byte]]]
+  )(
+    settings: ConsumerSettings,
+    diagnostics: Diagnostics = Diagnostics.NoOp
+  ): ZManaged[Clock with Blocking with R, Throwable, Consumer] =
+    // Here, we "forget" the finalizer of the provided managed instance because we'll close the Consumer it contains by ourselves in the ConsumerAccess.
+    ZManaged.unwrap {
+      managedJavaConsumer.reserve.flatMap { reservation =>
+        reservation.acquire.map(fromJavaConsumer(_)(settings, diagnostics))
+      }
+    }
+
+  def javaConsumerFromSettings(
+    settings: ConsumerSettings
+  ): ZManaged[Any, Throwable, JConsumer[Array[Byte], Array[Byte]]] =
+    ZManaged.makeEffect(
+      new KafkaConsumer[Array[Byte], Array[Byte]](
+        settings.driverSettings.asJava,
+        new ByteArrayDeserializer(),
+        new ByteArrayDeserializer()
+      )
+    )(_.close(settings.closeTimeout))
+
   /**
    * Accessor method for [[Consumer.assignment]]
    */
