@@ -871,7 +871,7 @@ object AdminClient extends Accessible[AdminClient] {
     lazy val asJava: JAlterConfigOp = new JAlterConfigOp(configEntry, opType.asJava)
   }
 
-  trait AlterConfigOpType {
+  sealed trait AlterConfigOpType {
     def asJava: JAlterConfigOp.OpType
   }
 

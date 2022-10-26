@@ -511,8 +511,8 @@ object AdminSpec extends DefaultRunnableSpec {
             assert(updatedRetentionMsConfig.map(_.source()))(isSome(equalTo(ConfigSource.DYNAMIC_TOPIC_CONFIG))) &&
             assert(deleteRetentionMsConfig.map(_.value()))(isSome(equalTo("604800000"))) &&
             assert(deleteRetentionMsConfig.map(_.source()))(isSome(equalTo(ConfigSource.DEFAULT_CONFIG))) &&
-            assert(setResult)(equalTo(Map(configResource -> ()))) &&
-            assert(deleteResult)(equalTo(Map(configResource -> ())))
+            assert(setResult)(equalTo(Map((configResource, ())))) &&
+            assert(deleteResult)(equalTo(Map((configResource, ()))))
           }
         }
       }
