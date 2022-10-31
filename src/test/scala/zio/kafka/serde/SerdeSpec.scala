@@ -7,6 +7,9 @@ import zio.test._
 import scala.reflect.ClassTag
 
 object SerdeSpec extends DefaultRunnableSpec {
+
+  private val anyBytes = Gen.listOf(Gen.anyByte).map(bytes => new org.apache.kafka.common.utils.Bytes(bytes.toArray))
+
   override def spec = suite("Serde")(
     testSerde(Serde.string, Gen.anyString),
     testSerde(Serde.int, Gen.anyInt),
@@ -15,6 +18,7 @@ object SerdeSpec extends DefaultRunnableSpec {
     testSerde(Serde.double, Gen.anyDouble),
     testSerde(Serde.long, Gen.anyLong),
     testSerde(Serde.uuid, Gen.anyUUID),
+    testSerde(Serde.bytes, anyBytes),
     testSerde(Serde.byteArray, Gen.listOf(Gen.anyByte).map(_.toArray)),
     suite("asOption")(
       testM("serialize and deserialize None values to null and visa versa") {
