@@ -3,6 +3,8 @@ package zio.kafka.admin
 import org.apache.kafka.clients.admin.ListOffsetsResult.{ ListOffsetsResultInfo => JListOffsetsResultInfo }
 import org.apache.kafka.clients.admin.{
   Admin => JAdmin,
+  AlterConfigOp => JAlterConfigOp,
+  AlterConfigsOptions => JAlterConfigsOptions,
   AlterConsumerGroupOffsetsOptions => JAlterConsumerGroupOffsetsOptions,
   Config => JConfig,
   ConsumerGroupDescription => JConsumerGroupDescription,
@@ -47,7 +49,7 @@ import org.apache.kafka.common.{
 import zio._
 
 import java.util.Optional
-import scala.annotation.tailrec
+import scala.annotation.{ nowarn, tailrec }
 import scala.collection.mutable.ListBuffer
 import scala.jdk.CollectionConverters._
 import scala.util.{ Failure, Success, Try }
@@ -231,6 +233,41 @@ trait AdminClient {
   def describeLogDirsAsync(
     brokersId: Iterable[Int]
   ): ZIO[Any, Throwable, Map[Int, Task[Map[String, LogDirDescription]]]]
+
+  /**
+   * Incrementally update the configuration for the specified resources. Only supported by brokers with version 2.3.0 or
+   * higher. Use alterConfigs otherwise.
+   */
+  def incrementalAlterConfigs(
+    configs: Map[ConfigResource, Iterable[AlterConfigOp]],
+    options: AlterConfigsOptions
+  ): Task[Unit]
+
+  /**
+   * Incrementally update the configuration for the specified resources async. Only supported by brokers with version
+   * 2.3.0 or higher. Use alterConfigsAsync otherwise.
+   */
+  def incrementalAlterConfigsAsync(
+    configs: Map[ConfigResource, Iterable[AlterConfigOp]],
+    options: AlterConfigsOptions
+  ): Task[Map[ConfigResource, Task[Unit]]]
+
+  /**
+   * Update the configuration for the specified resources.
+   *
+   * If you are using brokers with version 2.3.0 or higher, please use incrementalAlterConfigs instead.
+   */
+  def alterConfigs(configs: Map[ConfigResource, KafkaConfig], options: AlterConfigsOptions): Task[Unit]
+
+  /**
+   * Update the configuration for the specified resources async.
+   *
+   * If you are using brokers with version 2.3.0 or higher, please use incrementalAlterConfigs instead.
+   */
+  def alterConfigsAsync(
+    configs: Map[ConfigResource, KafkaConfig],
+    options: AlterConfigsOptions
+  ): Task[Map[ConfigResource, Task[Unit]]]
 }
 
 object AdminClient {
@@ -644,6 +681,79 @@ object AdminClient {
             )
           }.toMap
         )
+
+    override def incrementalAlterConfigs(
+      configs: Map[ConfigResource, Iterable[AlterConfigOp]],
+      options: AlterConfigsOptions
+    ): Task[Unit] =
+      fromKafkaFutureVoid(
+        ZIO
+          .attemptBlocking(
+            adminClient
+              .incrementalAlterConfigs(
+                configs.map { case (configResource, alterConfigOps) =>
+                  (configResource.asJava, alterConfigOps.map(_.asJava).asJavaCollection)
+                }.asJava,
+                options.asJava
+              )
+              .all()
+          )
+      )
+
+    override def incrementalAlterConfigsAsync(
+      configs: Map[ConfigResource, Iterable[AlterConfigOp]],
+      options: AlterConfigsOptions
+    ): Task[Map[ConfigResource, Task[Unit]]] =
+      ZIO
+        .attemptBlocking(
+          adminClient
+            .incrementalAlterConfigs(
+              configs.map { case (configResource, alterConfigOps) =>
+                (configResource.asJava, alterConfigOps.map(_.asJava).asJavaCollection)
+              }.asJava,
+              options.asJava
+            )
+            .values()
+        )
+        .map(_.asScala.map { case (configResource, kf) =>
+          (ConfigResource(configResource), ZIO.fromCompletionStage(kf.toCompletionStage).unit)
+        }.toMap)
+
+    @nowarn("msg=deprecated")
+    override def alterConfigs(configs: Map[ConfigResource, KafkaConfig], options: AlterConfigsOptions): Task[Unit] =
+      fromKafkaFutureVoid(
+        ZIO
+          .attemptBlocking(
+            adminClient
+              .alterConfigs(
+                configs.map { case (configResource, kafkaConfig) =>
+                  (configResource.asJava, kafkaConfig.asJava)
+                }.asJava,
+                options.asJava
+              )
+              .all()
+          )
+      )
+
+    @nowarn("msg=deprecated")
+    override def alterConfigsAsync(
+      configs: Map[ConfigResource, KafkaConfig],
+      options: AlterConfigsOptions
+    ): Task[Map[ConfigResource, Task[Unit]]] =
+      ZIO
+        .attemptBlocking(
+          adminClient
+            .alterConfigs(
+              configs.map { case (configResource, kafkaConfig) =>
+                (configResource.asJava, kafkaConfig.asJava)
+              }.asJava,
+              options.asJava
+            )
+            .values()
+        )
+        .map(_.asScala.map { case (configResource, kf) =>
+          (ConfigResource(configResource), ZIO.fromCompletionStage(kf.toCompletionStage).unit)
+        }.toMap)
   }
 
   val live: ZLayer[AdminClientSettings, Throwable, AdminClient] =
@@ -856,6 +966,39 @@ object AdminClient {
       val jOpts = new JDescribeConsumerGroupsOptions()
         .includeAuthorizedOperations(includeAuthorizedOperations)
       timeout.fold(jOpts)(timeout => jOpts.timeoutMs(timeout.toMillis.toInt))
+    }
+  }
+
+  final case class AlterConfigsOptions(validateOnly: Boolean = false, timeout: Option[Duration] = None) {
+    lazy val asJava: JAlterConfigsOptions = {
+      val jOpts = new JAlterConfigsOptions().validateOnly(validateOnly)
+      timeout.fold(jOpts)(timeout => jOpts.timeoutMs(timeout.toMillis.toInt))
+    }
+  }
+
+  final case class AlterConfigOp(configEntry: ConfigEntry, opType: AlterConfigOpType) {
+    lazy val asJava: JAlterConfigOp = new JAlterConfigOp(configEntry, opType.asJava)
+  }
+
+  sealed trait AlterConfigOpType {
+    def asJava: JAlterConfigOp.OpType
+  }
+
+  object AlterConfigOpType {
+    case object Set extends AlterConfigOpType {
+      lazy val asJava = JAlterConfigOp.OpType.SET
+    }
+
+    case object Delete extends AlterConfigOpType {
+      lazy val asJava = JAlterConfigOp.OpType.DELETE
+    }
+
+    case object Append extends AlterConfigOpType {
+      lazy val asJava = JAlterConfigOp.OpType.APPEND
+    }
+
+    case object Substract extends AlterConfigOpType {
+      lazy val asJava = JAlterConfigOp.OpType.SUBTRACT
     }
   }
 
@@ -1120,7 +1263,9 @@ object AdminClient {
       )
   }
 
-  final case class KafkaConfig(entries: Map[String, ConfigEntry])
+  final case class KafkaConfig(entries: Map[String, ConfigEntry]) {
+    def asJava: JConfig = new JConfig(entries.values.asJavaCollection)
+  }
   object KafkaConfig {
     def apply(jConfig: JConfig): KafkaConfig =
       KafkaConfig(entries = jConfig.entries().asScala.map(e => e.name() -> e).toMap)
