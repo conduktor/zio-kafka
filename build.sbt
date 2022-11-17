@@ -1,17 +1,37 @@
+import sbt.Keys.{ fork, parallelExecution }
+import scala.sys.process._
+
+import scala.util.Try
+
 lazy val scala212  = "2.12.17"
-lazy val scala213  = "2.13.8"
-lazy val scala3    = "3.1.3"
+lazy val scala213  = "2.13.10"
+lazy val scala3    = "3.2.1"
 lazy val mainScala = scala213
 lazy val allScala  = Seq(scala212, scala3, mainScala)
 
 lazy val zioVersion           = "2.0.2"
-lazy val kafkaVersion         = "3.2.0"
+lazy val kafkaVersion         = "3.2.0-cdk"
 lazy val embeddedKafkaVersion = "3.2.0" // Should be the same as kafkaVersion, except for the patch part
 
-lazy val embeddedKafka = "io.github.embeddedkafka" %% "embedded-kafka" % embeddedKafkaVersion
+lazy val kafkaClients          = "io.conduktor.kafka"         % "kafka-clients"           % kafkaVersion
+lazy val zio                   = "dev.zio"                   %% "zio"                     % zioVersion
+lazy val zioStreams            = "dev.zio"                   %% "zio-streams"             % zioVersion
+lazy val zioTest               = "dev.zio"                   %% "zio-test"                % zioVersion
+lazy val zioTestSbt            = "dev.zio"                   %% "zio-test-sbt"            % zioVersion
+lazy val scalaCollectionCompat = "org.scala-lang.modules"    %% "scala-collection-compat" % "2.8.1"
+lazy val jacksonDatabind       = "com.fasterxml.jackson.core" % "jackson-databind"        % "2.14.0"
+lazy val logback               = "ch.qos.logback"             % "logback-classic"         % "1.4.4"
+lazy val embeddedKafka         = "io.github.embeddedkafka"   %% "embedded-kafka"          % embeddedKafkaVersion
+
+val GITHUB_OWNER   = "conduktor"
+val GITHUB_PROJECT = "zio-kafka"
+
+def env(v: String): Option[String] = sys.env.get(v)
 
 inThisBuild(
   List(
+    version := sys.env
+      .getOrElse("RELEASE_VERSION", "0.0.1-SNAPSHOT"), // "RELEASE_VERSION" comes from .github/workflows/release.yml
     organization             := "dev.zio",
     homepage                 := Some(url("https://github.com/zio/zio-kafka")),
     licenses                 := List("Apache-2.0" -> url("http://www.apache.org/licenses/LICENSE-2.0")),
@@ -21,9 +41,6 @@ inThisBuild(
     Test / parallelExecution := false,
     Test / fork              := true,
     run / fork               := true,
-    pgpPublicRing            := file("/tmp/public.asc"),
-    pgpSecretRing            := file("/tmp/secret.asc"),
-    pgpPassphrase            := sys.env.get("PGP_PASSWORD").map(_.toArray),
     scmInfo := Some(
       ScmInfo(url("https://github.com/zio/zio-kafka/"), "scm:git:git@github.com:zio/zio-kafka.git")
     ),
@@ -34,6 +51,25 @@ inThisBuild(
         "iravid@iravid.com",
         url("https://github.com/iravid")
       )
+    ),
+    // ####### BEGIN: Conduktor publishing settings #######
+    publishMavenStyle := true,
+    publishTo := Some(
+      s"GitHub $GITHUB_OWNER Apache Maven Packages of $GITHUB_PROJECT" at s"https://maven.pkg.github.com/$GITHUB_OWNER/$GITHUB_PROJECT"
+    ),
+    resolvers += s"GitHub $GITHUB_OWNER Apache Maven Packages" at s"https://maven.pkg.github.com/$GITHUB_OWNER/_/",
+    credentials += Credentials(
+      "GitHub Package Registry",
+      "maven.pkg.github.com",
+      GITHUB_OWNER,
+      (env("GH_PACKAGES_TOKEN") orElse env("GH_READ_PACKAGES") orElse env("GITHUB_TOKEN"))
+        .orElse(Try(s"git config github.token".!!).map(_.trim).toOption)
+        .getOrElse(
+          throw new RuntimeException(
+            "Missing env variable: `GH_PACKAGES_TOKEN` or `GH_READ_PACKAGES` or `GITHUB_TOKEN` or git config option: `github.token`"
+          )
+        )
+      // ####### END: Conduktor publishing settings #######
     )
   )
 )
@@ -81,10 +117,10 @@ lazy val zioKafka =
     .settings(buildInfoSettings("zio.kafka"))
     .settings(
       libraryDependencies ++= Seq(
-        "dev.zio"                   %% "zio-streams"             % zioVersion,
-        "org.apache.kafka"           % "kafka-clients"           % kafkaVersion,
-        "com.fasterxml.jackson.core" % "jackson-databind"        % "2.13.3",
-        "org.scala-lang.modules"    %% "scala-collection-compat" % "2.7.0"
+        zioStreams,
+        kafkaClients,
+        jacksonDatabind,
+        scalaCollectionCompat
       )
     )
 
@@ -97,9 +133,9 @@ lazy val zioKafkaTestUtils =
     .settings(buildInfoSettings("zio.kafka"))
     .settings(
       libraryDependencies ++= Seq(
-        "dev.zio"                %% "zio"                     % zioVersion,
-        "org.apache.kafka"        % "kafka-clients"           % kafkaVersion,
-        "org.scala-lang.modules" %% "scala-collection-compat" % "2.7.0"
+        zio,
+        kafkaClients,
+        scalaCollectionCompat
       ) ++ {
         if (scalaBinaryVersion.value == "3")
           Seq(
@@ -120,13 +156,13 @@ lazy val zioKafkaTest =
     .settings(publish / skip := true)
     .settings(
       libraryDependencies ++= Seq(
-        "dev.zio"                   %% "zio-streams"             % zioVersion,
-        "dev.zio"                   %% "zio-test"                % zioVersion % Test,
-        "dev.zio"                   %% "zio-test-sbt"            % zioVersion % Test,
-        "org.apache.kafka"           % "kafka-clients"           % kafkaVersion,
-        "com.fasterxml.jackson.core" % "jackson-databind"        % "2.13.4",
-        "ch.qos.logback"             % "logback-classic"         % "1.2.11"   % Test,
-        "org.scala-lang.modules"    %% "scala-collection-compat" % "2.8.1"
+        zioStreams,
+        zioTest    % Test,
+        zioTestSbt % Test,
+        kafkaClients,
+        jacksonDatabind,
+        logback % Test,
+        scalaCollectionCompat
       ) ++ {
         if (scalaBinaryVersion.value == "3")
           Seq(
