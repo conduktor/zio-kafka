@@ -817,7 +817,7 @@ object AdminClient {
               .all()
           )
       )
-    
+
     override def createAclsAsync(
       acls: Set[AclBinding],
       options: Option[CreateAclOptions]
