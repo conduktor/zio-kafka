@@ -7,7 +7,7 @@ import org.apache.kafka.common.{ Node => JNode }
 import zio.blocking.Blocking
 import zio.clock.Clock
 import zio.duration.Duration
-import zio.kafka.KafkaTestUtils
+import zio.kafka.{ KafkaRandom, KafkaTestUtils }
 import zio.kafka.KafkaTestUtils._
 import zio.kafka.admin.AdminClient.{
   AlterConfigOp,
@@ -24,6 +24,7 @@ import zio.kafka.admin.AdminClient.{
   OffsetSpec,
   TopicPartition
 }
+import zio.kafka.admin.acl.AclOperation
 import zio.kafka.consumer.{ Consumer, OffsetBatch, Subscription }
 import zio.kafka.embedded.Kafka
 import zio.kafka.serde.Serde
@@ -36,7 +37,10 @@ import zio.{ Chunk, Has, Schedule, ZIO }
 
 import java.util.UUID
 
-object AdminSpec extends DefaultRunnableSpec {
+object AdminSpec extends DefaultRunnableSpec with KafkaRandom {
+
+  override def kafkaPrefix: String = "adminspec"
+
   override def spec =
     suite("client admin test")(
       testM("create, list, delete single topic") {

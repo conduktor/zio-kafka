@@ -5,6 +5,7 @@ import org.apache.kafka.common.TopicPartition
 import zio.blocking.Blocking
 import zio.clock.Clock
 import zio.duration._
+import zio.kafka.KafkaRandom
 import zio.kafka.KafkaTestUtils._
 import zio.kafka.consumer.Consumer.{ AutoOffsetStrategy, OffsetRetrieval }
 import zio.kafka.consumer.diagnostics.{ DiagnosticEvent, Diagnostics }
@@ -17,7 +18,10 @@ import zio.test.environment._
 import zio.test.{ DefaultRunnableSpec, _ }
 import zio.{ Chunk, Has, Promise, Ref, Schedule, Task, ZIO, ZLayer }
 
-object ConsumerSpec extends DefaultRunnableSpec {
+object ConsumerSpec extends DefaultRunnableSpec with KafkaRandom {
+
+  override def kafkaPrefix: String = "consumerspec"
+
   override def spec: ZSpec[TestEnvironment, Throwable] =
     suite("Consumer Streaming")(
       testM("export metrics") {
