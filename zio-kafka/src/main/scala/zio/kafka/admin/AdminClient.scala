@@ -865,11 +865,7 @@ object AdminClient {
               .fromCompletionStage(v.toCompletionStage)
               .map(
                 _.values().asScala.view.map { filterRes =>
-                  /**
-                   * [[org.apache.kafka.clients.admin.DeleteAclsResult.FilterResult.binding()]] is claimed to be
-                   * nullable in javadoc but in fact it is always set, see
-                   * [[org.apache.kafka.common.requests.DeleteAclsResponse.aclBinding]]
-                   */
+                  // FilterResult.binding() is claimed to be nullable but in fact it is not: see DeleteAclsResponse.aclBinding
                   AclBinding(filterRes.binding()) -> Option(filterRes.exception())
                 }.toMap
               )
