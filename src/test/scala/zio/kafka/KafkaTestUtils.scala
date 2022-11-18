@@ -14,8 +14,6 @@ import zio.kafka.embedded.Kafka
 import zio.kafka.producer._
 import zio.kafka.serde.{ Deserializer, Serde, Serializer }
 
-import java.util.UUID
-
 object KafkaTestUtils {
 
   val producerSettings: ZIO[Has[Kafka], Nothing, ProducerSettings] =
@@ -170,12 +168,5 @@ object KafkaTestUtils {
       .make(settings)
       .use(client => f(client))
       .provideSomeLayer[Has[R]](Clock.live ++ Blocking.live)
-
-  def randomThing(prefix: String): Task[String] =
-    Task(UUID.randomUUID()).map(uuid => s"$prefix-$uuid")
-
-  def randomTopic: Task[String] = randomThing("topic")
-
-  def randomGroup: Task[String] = randomThing("group")
 
 }
