@@ -21,6 +21,7 @@ import zio.kafka.admin.AdminClient.{
   OffsetSpec,
   TopicPartition
 }
+import zio.kafka.admin.acl._
 import zio.kafka.consumer.{ CommittableRecord, Consumer, OffsetBatch, Subscription }
 import zio.kafka.embedded.Kafka
 import zio.kafka.serde.Serde
@@ -28,7 +29,7 @@ import zio.stream.ZSink
 import zio.test.Assertion._
 import zio.test.TestAspect._
 import zio.test._
-import zio.{ Chunk, Duration, Schedule, ZIO }
+import zio._
 
 import java.util.UUID
 
