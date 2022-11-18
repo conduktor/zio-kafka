@@ -137,14 +137,39 @@ object KafkaTestUtils {
   def adminSettings: ZIO[Has[Kafka], Nothing, AdminClientSettings] =
     ZIO.access[Has[Kafka]](_.get[Kafka].bootstrapServers).map(AdminClientSettings(_))
 
-  def withAdmin[T](f: AdminClient => RIO[Clock with Has[Kafka] with Blocking, T]) =
+  def saslAdminSettings(username: String, password: String): URIO[Has[Kafka.Sasl], AdminClientSettings] =
+    ZIO
+      .access[Has[Kafka.Sasl]](_.get[Kafka.Sasl].value.bootstrapServers)
+      .map(
+        AdminClientSettings(_).withProperties(
+          "sasl.mechanism"    -> "PLAIN",
+          "security.protocol" -> "SASL_PLAINTEXT",
+          "sasl.jaas.config" -> s"""org.apache.kafka.common.security.plain.PlainLoginModule required username="$username" password="$password";"""
+        )
+      )
+
+  def withAdmin[T](f: AdminClient => RIO[Clock with Has[Kafka] with Blocking, T]): RIO[Has[Kafka], T] =
     for {
       settings <- adminSettings
-      fRes <- AdminClient
-                .make(settings)
-                .use(client => f(client))
-                .provideSomeLayer[Has[Kafka]](Clock.live ++ Blocking.live)
+      fRes     <- withAdminClient[Kafka, T](settings)(f)
     } yield fRes
+
+  def withSaslAdmin[T](
+    username: String = "admin",
+    password: String = "admin-secret"
+  )(f: AdminClient => RIO[Clock with Has[Kafka.Sasl] with Blocking, T]): RIO[Has[Kafka.Sasl], T] =
+    for {
+      settings <- saslAdminSettings(username, password)
+      fRes     <- withAdminClient[Kafka.Sasl, T](settings)(f)
+    } yield fRes
+
+  private def withAdminClient[R, T](
+    settings: AdminClientSettings
+  )(f: AdminClient => RIO[Has[R] with Clock with Blocking, T]): RIO[Has[R], T] =
+    AdminClient
+      .make(settings)
+      .use(client => f(client))
+      .provideSomeLayer[Has[R]](Clock.live ++ Blocking.live)
 
   def randomThing(prefix: String): Task[String] =
     Task(UUID.randomUUID()).map(uuid => s"$prefix-$uuid")

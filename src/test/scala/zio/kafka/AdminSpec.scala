@@ -24,6 +24,7 @@ import zio.kafka.admin.AdminClient.{
   OffsetSpec,
   TopicPartition
 }
+import zio.kafka.admin.acl.AclOperation
 import zio.kafka.consumer.{ Consumer, OffsetBatch, Subscription }
 import zio.kafka.embedded.Kafka
 import zio.kafka.serde.Serde
