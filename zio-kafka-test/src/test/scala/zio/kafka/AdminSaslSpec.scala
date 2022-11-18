@@ -15,6 +15,7 @@ import zio.kafka.admin.acl.AclPermissionType
 import zio.kafka.admin.acl.AclOperation
 import zio.kafka.admin.resource.ResourceType
 import zio.kafka.admin.resource.PatternType
+import java.util.concurrent.TimeoutException
 
 object AdminSaslSpec extends ZIOSpecWithSaslKafka {
 
@@ -38,19 +39,20 @@ object AdminSaslSpec extends ZIOSpecWithSaslKafka {
                   )
                 )
               )
-            _ <-
-              client.createAcls(bindings)
+            _ <- client.createAcls(bindings)
             createdAcls <-
               client
                 .describeAcls(AclBindingFilter(ResourcePatternFilter.Any, AccessControlEntryFilter.Any))
-                .delay(50.millis) // because the createAcls is async
+                .repeatWhile(_.isEmpty) // because the createAcls is executed async by the broker
+                .timeoutFail(new TimeoutException())(100.millis)
             deletedAcls <-
               client
                 .deleteAcls(Set(AclBindingFilter(ResourcePatternFilter.Any, AccessControlEntryFilter.Any)))
             remainingAcls <-
               client
                 .describeAcls(AclBindingFilter(ResourcePatternFilter.Any, AccessControlEntryFilter.Any))
-                .delay(50.millis) // because the deleteAcls is async
+                .repeatWhile(_.nonEmpty) // because the deleteAcls is executed async by the broker
+                .timeoutFail(new TimeoutException())(100.millis)
 
           } yield assert(createdAcls)(equalTo(bindings)) &&
             assert(deletedAcls)(equalTo(bindings)) &&
