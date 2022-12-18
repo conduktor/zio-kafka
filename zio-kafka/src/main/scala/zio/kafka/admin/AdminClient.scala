@@ -48,7 +48,6 @@ import org.apache.kafka.common.{
   Uuid
 }
 import zio._
-
 import zio.kafka.admin.acl._
 
 import java.util.Optional
@@ -1405,15 +1404,15 @@ object AdminClient {
   }
 
   def make(settings: AdminClientSettings): ZIO[Scope, Throwable, AdminClient] =
-    fromManagedJavaClient(javaClientFromSettings(settings))
+    fromScopedJavaClient(javaClientFromSettings(settings))
 
   def fromJavaClient(javaClient: JAdmin): URIO[Any, AdminClient] =
     ZIO.succeed(new LiveAdminClient(javaClient))
 
-  def fromManagedJavaClient[R, E](
-    managedJavaClient: ZIO[R with Scope, E, JAdmin]
+  def fromScopedJavaClient[R, E](
+    scopedJavaClient: ZIO[R with Scope, E, JAdmin]
   ): ZIO[R with Scope, E, AdminClient] =
-    managedJavaClient.flatMap { javaClient =>
+    scopedJavaClient.flatMap { javaClient =>
       fromJavaClient(javaClient)
     }
 
