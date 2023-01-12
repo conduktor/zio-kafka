@@ -86,8 +86,7 @@ lazy val root = project
   .aggregate(
     zioKafka,
     zioKafkaTestUtils,
-    zioKafkaTest,
-    docs
+    zioKafkaTest
   )
 
 def buildInfoSettings(packageName: String) =
@@ -179,24 +178,3 @@ lazy val zioKafkaTest =
 
 addCommandAlias("fmt", "all scalafmtSbt scalafmt test:scalafmt")
 addCommandAlias("check", "all scalafmtSbtCheck scalafmtCheck test:scalafmtCheck")
-
-lazy val docs = project
-  .in(file("zio-kafka-docs"))
-  .settings(
-    moduleName := "zio-kafka-docs",
-    scalacOptions -= "-Yno-imports",
-    scalacOptions -= "-Xfatal-warnings",
-    projectName                                := "ZIO Kafka",
-    mainModuleName                             := (zioKafka / moduleName).value,
-    projectStage                               := ProjectStage.ProductionReady,
-    docsPublishBranch                          := "master",
-    ScalaUnidoc / unidoc / unidocProjectFilter := inProjects(zioKafka),
-    readmeCredits :=
-      "This library is heavily inspired and made possible by the research and implementation done in " +
-        "[Alpakka Kafka](https://github.com/akka/alpakka-kafka), a library maintained by the Akka team and originally " +
-        "written as Reactive Kafka by SoftwareMill.",
-    readmeLicense +=
-      "\n\n" + """|Copyright 2021 Itamar Ravid and the zio-kafka contributors. All rights reserved.
-                  |<!-- TODO: not all rights reserved, rather Apache 2... -->""".stripMargin
-  )
-  .enablePlugins(WebsitePlugin)
