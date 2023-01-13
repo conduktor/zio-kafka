@@ -11,7 +11,7 @@ lazy val allScala  = Seq(scala212, scala3, mainScala)
 
 lazy val zioVersion           = "2.0.5"
 lazy val kafkaVersion         = "3.2.0-cdk"
-lazy val embeddedKafkaVersion = "3.3.1" // Should be the same as kafkaVersion, except for the patch part
+lazy val embeddedKafkaVersion = "3.2.0" // Should be the same as kafkaVersion, except for the patch part
 
 lazy val kafkaClients          = "io.conduktor.kafka"         % "kafka-clients"           % kafkaVersion
 lazy val zio                   = "dev.zio"                   %% "zio"                     % zioVersion
@@ -20,7 +20,7 @@ lazy val zioTest               = "dev.zio"                   %% "zio-test"      
 lazy val zioTestSbt            = "dev.zio"                   %% "zio-test-sbt"            % zioVersion
 lazy val scalaCollectionCompat = "org.scala-lang.modules"    %% "scala-collection-compat" % "2.9.0"
 lazy val jacksonDatabind       = "com.fasterxml.jackson.core" % "jackson-databind"        % "2.14.1"
-lazy val logback               = "ch.qos.logback"             % "logback-classic"         % "1.4.4"
+lazy val logback               = "ch.qos.logback"             % "logback-classic"         % "1.4.5"
 lazy val embeddedKafka         = "io.github.embeddedkafka"   %% "embedded-kafka"          % embeddedKafkaVersion
 
 val GITHUB_OWNER   = "conduktor"
