@@ -11,6 +11,8 @@ import zio.kafka.embedded.Kafka
 import zio.kafka.producer._
 import zio.kafka.serde.{ Deserializer, Serde, Serializer }
 
+import java.nio.file.Paths
+
 object KafkaTestUtils {
 
   val producerSettings: ZIO[Kafka, Nothing, ProducerSettings] =
@@ -169,6 +171,29 @@ object KafkaTestUtils {
         )
       )
 
+  def sslAdminSettings: ZIO[Kafka, Nothing, AdminClientSettings] =
+    ZIO
+      .serviceWith[Kafka](_.bootstrapServers)
+      .flatMap(bootstrap =>
+        ZIO.attempt {
+          val trustStorePath = Paths.get(Kafka.getClass.getResource("/truststore/kafka.truststore.jks").toURI).toFile
+          val keyStorePath   = Paths.get(Kafka.getClass.getResource("/keystore/kafka.keystore.jks").toURI).toFile
+
+          AdminClientSettings(bootstrap).withProperties(
+            "security.protocol"       -> "SSL",
+            "ssl.truststore.location" -> trustStorePath.getAbsolutePath,
+            "ssl.truststore.password" -> "123456",
+            "ssl.keystore.location"   -> keyStorePath.getAbsolutePath,
+            "ssl.keystore.password"   -> "123456",
+            "ssl.key.password"        -> "123456",
+            "ssl.enabled.protocols"   -> "TLSv1.2",
+            "ssl.truststore.type"     -> "JKS",
+            "ssl.keystore.type"       -> "JKS"
+          )
+        }
+      )
+      .orDie
+
   def withAdmin[T](f: AdminClient => RIO[Kafka, T]): ZIO[Kafka, Throwable, T] =
     for {
       settings <- adminSettings
@@ -183,6 +208,14 @@ object KafkaTestUtils {
   ): ZIO[Kafka.Sasl, Throwable, T] =
     for {
       settings <- saslAdminSettings(username, password)
+      fRes     <- withAdminClient(settings)(f)
+    } yield fRes
+
+  def withSslAdmin[T](
+    f: AdminClient => RIO[Kafka, T]
+  ): ZIO[Kafka, Throwable, T] =
+    for {
+      settings <- sslAdminSettings
       fRes     <- withAdminClient(settings)(f)
     } yield fRes
 
