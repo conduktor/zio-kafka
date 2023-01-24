@@ -36,7 +36,7 @@ import org.apache.kafka.clients.admin.{
 }
 import org.apache.kafka.clients.consumer.{ OffsetAndMetadata => JOffsetAndMetadata }
 import org.apache.kafka.common.config.{ ConfigResource => JConfigResource }
-import org.apache.kafka.common.errors.ApiException
+import org.apache.kafka.common.errors.{ ApiException, UnknownTopicOrPartitionException }
 import org.apache.kafka.common.{
   ConsumerGroupState => JConsumerGroupState,
   IsolationLevel => JIsolationLevel,
@@ -49,7 +49,7 @@ import org.apache.kafka.common.{
   Uuid
 }
 import zio._
-
+import zio.kafka.admin.AdminClient.TopicPartition
 import zio.kafka.admin.acl._
 
 import java.util.Optional
@@ -57,6 +57,14 @@ import scala.annotation.{ nowarn, tailrec }
 import scala.collection.mutable.ListBuffer
 import scala.jdk.CollectionConverters._
 import scala.util.{ Failure, Success, Try }
+
+sealed trait CheckTopicPartitionExistError
+object CheckTopicPartitionExistError {
+  final case class KafkaError(error: Throwable)                              extends CheckTopicPartitionExistError
+  final case class NonExistingTopic(error: UnknownTopicOrPartitionException) extends CheckTopicPartitionExistError
+  final case class NonExistingPartitions(topicPartitions: NonEmptyChunk[TopicPartition])
+      extends CheckTopicPartitionExistError
+}
 
 trait AdminClient {
 
@@ -74,6 +82,11 @@ trait AdminClient {
    * Create a single topic.
    */
   def createTopic(newTopic: NewTopic, validateOnly: Boolean = false): Task[Unit]
+
+  /**
+   * Validate that the passed topics' partitions exist
+   */
+  def checkTopicPartitionExist(topicPartitions: List[TopicPartition]): IO[CheckTopicPartitionExistError, Unit]
 
   /**
    * Delete consumer groups.
@@ -358,6 +371,37 @@ object AdminClient {
      */
     override def createTopic(newTopic: NewTopic, validateOnly: Boolean = false): Task[Unit] =
       createTopics(List(newTopic), Some(CreateTopicsOptions(validateOnly = validateOnly, timeout = Option.empty)))
+
+    /**
+     * Validate that the passed topics' partitions exist
+     */
+    override def checkTopicPartitionExist(
+      topicPartitions: List[TopicPartition]
+    ): IO[CheckTopicPartitionExistError, Unit] =
+      fromKafkaFuture {
+        ZIO.attemptBlocking(
+          adminClient
+            .describeTopics(topicPartitions.map(_.name).asJava)
+            .allTopicNames()
+        )
+      }.mapError {
+        case e: UnknownTopicOrPartitionException => CheckTopicPartitionExistError.NonExistingTopic(e)
+        case e                                   => CheckTopicPartitionExistError.KafkaError(e)
+      }.flatMap { topicDescriptions =>
+        val presentTopicPartitions =
+          topicDescriptions
+            .values()
+            .asScala
+            .flatMap(topicDescription =>
+              topicDescription.partitions.asScala
+                .map(partition => TopicPartition(name = topicDescription.name, partition = partition.partition))
+            )
+
+        (topicPartitions.toSet -- presentTopicPartitions).toList match {
+          case Nil    => ZIO.unit // All topics' partitions exist
+          case h :: t => ZIO.fail(CheckTopicPartitionExistError.NonExistingPartitions(NonEmptyChunk.fromIterable(h, t)))
+        }
+      }
 
     /**
      * Delete consumer groups.
@@ -1180,6 +1224,7 @@ object AdminClient {
   }
 
   final case class MetricName(name: String, group: String, description: String, tags: Map[String, String])
+
   object MetricName {
     def apply(jmn: JMetricName): MetricName =
       MetricName(
@@ -1191,6 +1236,7 @@ object AdminClient {
   }
 
   final case class Metric(name: MetricName, metricValue: AnyRef)
+
   object Metric {
     def apply(jm: JMetric): Metric = Metric(name = MetricName(jmn = jm.metricName()), metricValue = jm.metricValue())
   }
@@ -1233,6 +1279,7 @@ object AdminClient {
   final case class Node(id: Int, host: Option[String], port: Option[Int], rack: Option[String] = None) {
     lazy val asJava: JNode = new JNode(id, host.getOrElse(""), port.getOrElse(-1), rack.orNull)
   }
+
   object Node {
     def apply(jNode: JNode): Option[Node] =
       Option(jNode)
@@ -1390,6 +1437,7 @@ object AdminClient {
     timestamp: Long,
     leaderEpoch: Option[Int]
   )
+
   object ListOffsetsResultInfo {
     def apply(lo: JListOffsetsResultInfo): ListOffsetsResultInfo =
       ListOffsetsResultInfo(lo.offset(), lo.timestamp(), lo.leaderEpoch().toScala.map(_.toInt))
@@ -1432,6 +1480,7 @@ object AdminClient {
   ) {
     def asJava: JOffsetAndMetadata = new JOffsetAndMetadata(offset, leaderEpoch.map(Int.box).toJava, metadata.orNull)
   }
+
   object OffsetAndMetadata {
     def apply(om: JOffsetAndMetadata): OffsetAndMetadata =
       OffsetAndMetadata(
@@ -1466,12 +1515,14 @@ object AdminClient {
   final case class KafkaConfig(entries: Map[String, ConfigEntry]) {
     def asJava: JConfig = new JConfig(entries.values.asJavaCollection)
   }
+
   object KafkaConfig {
     def apply(jConfig: JConfig): KafkaConfig =
       KafkaConfig(entries = jConfig.entries().asScala.map(e => e.name() -> e).toMap)
   }
 
   final case class LogDirDescription(error: ApiException, replicaInfos: Map[TopicPartition, ReplicaInfo])
+
   object LogDirDescription {
     def apply(ld: JLogDirDescription): LogDirDescription =
       LogDirDescription(
@@ -1481,6 +1532,7 @@ object AdminClient {
   }
 
   final case class ReplicaInfo(size: Long, offsetLag: Long, isFuture: Boolean)
+
   object ReplicaInfo {
     def apply(ri: JReplicaInfo): ReplicaInfo =
       ReplicaInfo(size = ri.size(), offsetLag = ri.offsetLag(), isFuture = ri.isFuture)
