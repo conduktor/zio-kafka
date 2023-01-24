@@ -1,7 +1,7 @@
 package zio.kafka
 
 import org.apache.kafka.clients.consumer.ConsumerConfig
-import org.apache.kafka.clients.producer.{ ProducerRecord, RecordMetadata }
+import org.apache.kafka.clients.producer.{ProducerRecord, RecordMetadata}
 import zio._
 import zio.kafka.admin._
 import zio.kafka.consumer.Consumer.OffsetRetrieval
@@ -9,14 +9,16 @@ import zio.kafka.consumer._
 import zio.kafka.consumer.diagnostics.Diagnostics
 import zio.kafka.embedded.Kafka
 import zio.kafka.producer._
-import zio.kafka.serde.{ Deserializer, Serde, Serializer }
+import zio.kafka.serde.{Deserializer, Serde, Serializer}
 
+import java.io.File
 import java.nio.file.Paths
 
 object KafkaTestUtils {
 
-  val trustStoreFile = Paths.get(KafkaTestUtils.getClass.getResource("/truststore/kafka.truststore.jks").toURI).toFile
-  val keyStoreFile   = Paths.get(KafkaTestUtils.getClass.getResource("/keystore/kafka.keystore.jks").toURI).toFile
+  val trustStoreFile: File = Paths.get(this.getClass.getResource("/truststore/kafka.truststore.jks").toURI).toFile
+
+  val keyStoreFile: File = Paths.get(this.getClass.getResource("/keystore/kafka.keystore.jks").toURI).toFile
 
   val producerSettings: ZIO[Kafka, Nothing, ProducerSettings] =
     ZIO.serviceWith[Kafka](_.bootstrapServers).map(ProducerSettings(_))
