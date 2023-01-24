@@ -1,54 +1,64 @@
 package zio.kafka.utils
 
+import org.apache.kafka.clients.{ ClientDnsLookup, ClientUtils }
 import zio.{ Task, ZIO }
 
-import java.net.InetSocketAddress
 import java.nio.ByteBuffer
 import java.nio.channels.SocketChannel
+import scala.jdk.CollectionConverters._
 
+/**
+ * This function validates that your Kafka client (Admin, Consumer, or Producer) configurations are valid for the Kafka
+ * Cluster you want to contact.
+ *
+ * This function protects you against this long standing bug in kafka-clients that leads to crash your app with an OOM.
+ * More details, see: https://issues.apache.org/jira/browse/KAFKA-4090
+ */
 object SslHelper {
-  // https://issues.apache.org/jira/browse/KAFKA-4090
   def validateEndpoint(bootstrapServers: List[String], props: Map[String, AnyRef]): Task[Unit] =
     ZIO
       .unless(
         props
           .get("security.protocol")
-          .collect { case x: String =>
-            x
+          .exists {
+            case x: String if x.toUpperCase().contains("SSL") => true
+            case _                                            => false
           }
-          .exists(_.toLowerCase().contains("SSL"))
       ) {
-        ZIO.foreachParDiscard(bootstrapServers) { str =>
-          ZIO.scoped {
-            for {
-              address <- ZIO.attempt {
-                           val arr  = str.split(":")
-                           val host = arr(0)
-                           val port = arr(1).toInt
-                           new InetSocketAddress(host, port)
-                         }
-              channel <- ZIO.acquireRelease(
-                           ZIO.attemptBlocking(SocketChannel.open(address))
-                         )(channel => ZIO.attempt(channel.close()).orDie)
-              tls <- ZIO.attemptBlocking {
-                       val buf = ByteBuffer.allocate(5)
-                       channel.write(buf)
-                       buf.position(0)
-                       channel.read(buf)
-                       buf.position(0)
-                       isTls(buf)
-                     }
-              _ <-
-                ZIO.when(tls)(
-                  ZIO.fail(
-                    new IllegalArgumentException(
-                      s"Received an unexpected SSL packet from the server. Please ensure the client is properly configured with SSL enabled"
-                    )
-                  )
-                )
-            } yield ()
-          }
-
+        ZIO.blocking {
+          for {
+            address <- ZIO.attempt {
+                         ClientUtils
+                           .parseAndValidateAddresses(bootstrapServers.asJava, ClientDnsLookup.USE_ALL_DNS_IPS)
+                           .asScala
+                           .toList
+                       }
+            _ <- ZIO.foreachParDiscard(address) { addr =>
+                   ZIO.scoped {
+                     for {
+                       channel <- ZIO.acquireRelease(
+                                    ZIO.attempt(SocketChannel.open(addr))
+                                  )(channel => ZIO.attempt(channel.close()).orDie)
+                       tls <- ZIO.attempt {
+                                val buf = ByteBuffer.allocate(5)
+                                channel.write(buf)
+                                buf.position(0)
+                                channel.read(buf)
+                                buf.position(0)
+                                isTls(buf)
+                              }
+                       _ <-
+                         ZIO.when(tls)(
+                           ZIO.fail(
+                             new IllegalArgumentException(
+                               s"Received an unexpected SSL packet from the server. Please ensure the client is properly configured with SSL enabled"
+                             )
+                           )
+                         )
+                     } yield ()
+                   }
+                 }
+          } yield ()
         }
       }
       .unit

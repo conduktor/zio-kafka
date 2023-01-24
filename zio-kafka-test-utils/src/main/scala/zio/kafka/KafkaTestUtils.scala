@@ -15,6 +15,9 @@ import java.nio.file.Paths
 
 object KafkaTestUtils {
 
+  val trustStoreFile = Paths.get(KafkaTestUtils.getClass.getResource("/truststore/kafka.truststore.jks").toURI).toFile
+  val keyStoreFile   = Paths.get(KafkaTestUtils.getClass.getResource("/keystore/kafka.keystore.jks").toURI).toFile
+
   val producerSettings: ZIO[Kafka, Nothing, ProducerSettings] =
     ZIO.serviceWith[Kafka](_.bootstrapServers).map(ProducerSettings(_))
 
@@ -176,14 +179,11 @@ object KafkaTestUtils {
       .serviceWith[Kafka](_.bootstrapServers)
       .flatMap(bootstrap =>
         ZIO.attempt {
-          val trustStorePath = Paths.get(Kafka.getClass.getResource("/truststore/kafka.truststore.jks").toURI).toFile
-          val keyStorePath   = Paths.get(Kafka.getClass.getResource("/keystore/kafka.keystore.jks").toURI).toFile
-
           AdminClientSettings(bootstrap).withProperties(
             "security.protocol"       -> "SSL",
-            "ssl.truststore.location" -> trustStorePath.getAbsolutePath,
+            "ssl.truststore.location" -> trustStoreFile.getAbsolutePath,
             "ssl.truststore.password" -> "123456",
-            "ssl.keystore.location"   -> keyStorePath.getAbsolutePath,
+            "ssl.keystore.location"   -> keyStoreFile.getAbsolutePath,
             "ssl.keystore.password"   -> "123456",
             "ssl.key.password"        -> "123456",
             "ssl.enabled.protocols"   -> "TLSv1.2",

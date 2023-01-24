@@ -8,6 +8,9 @@ import zio.kafka.serde.Serde
 import zio.test.TestAspect._
 import zio.test._
 
+/**
+ * This test checks the fix for the issue https://issues.apache.org/jira/browse/KAFKA-4090
+ */
 object OOMSpecXmx300m extends ZIOSpecWithSslKafka {
 
   override val kafkaPrefix: String = "oom-spec"
