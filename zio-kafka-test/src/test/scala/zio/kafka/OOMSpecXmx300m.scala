@@ -1,7 +1,6 @@
 package zio.kafka
 
 import org.apache.kafka.clients.producer.ProducerRecord
-import zio.ZIO
 import org.apache.kafka.common.KafkaException
 import zio.kafka.consumer.{ Consumer, Subscription }
 import zio.kafka.embedded.Kafka
@@ -43,13 +42,7 @@ object OOMSpecXmx300m extends ZIOSpecWithSslKafka {
         for {
           result <- (for {
                       topic <- randomTopic
-                      _ <- ZIO.serviceWithZIO[Consumer](
-                             _.consumeWith(
-                               Subscription.Topics(Set(topic)),
-                               Serde.byteArray,
-                               Serde.byteArray
-                             )(_ => ZIO.unit)
-                           )
+                      _     <- Consumer.subscribe(Subscription.Topics(Set(topic)))
                     } yield ()).provideSomeLayer(KafkaTestUtils.consumer("test")).exit
         } yield assert(result)(
           fails(
