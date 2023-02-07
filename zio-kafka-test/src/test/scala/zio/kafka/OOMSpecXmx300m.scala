@@ -2,7 +2,7 @@ package zio.kafka
 
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.KafkaException
-import zio.kafka.consumer.{ Consumer, Subscription }
+import zio.kafka.consumer.{Consumer, Subscription}
 import zio.kafka.embedded.Kafka
 import zio.kafka.producer.Producer
 import zio.kafka.serde.Serde
