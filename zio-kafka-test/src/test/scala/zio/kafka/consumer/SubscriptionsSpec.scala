@@ -6,7 +6,7 @@ import zio.kafka.ZIOKafkaSpec
 import zio.kafka.embedded.Kafka
 import zio.kafka.producer.Producer
 import zio.kafka.serde.Serde
-import zio.stream.{ZSink, ZStream}
+import zio.stream.{ ZSink, ZStream }
 import zio.test.Assertion._
 import zio.test.TestAspect._
 import zio.test._
