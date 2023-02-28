@@ -6,7 +6,7 @@ import zio.kafka.ZIOKafkaSpec
 import zio.kafka.embedded.Kafka
 import zio.kafka.producer.Producer
 import zio.kafka.serde.Serde
-import zio.stream.{ ZSink, ZStream }
+import zio.stream.{ZSink, ZStream}
 import zio.test.Assertion._
 import zio.test.TestAspect._
 import zio.test._
@@ -201,6 +201,6 @@ object SubscriptionsSpec extends ZIOKafkaSpec {
       } yield assert(consumed.map(r => r.value))(hasSameElements(Chunk.fromIterable(kvs.map(_._2))))
     } @@ TestAspect.nonFlaky(3)
   ).provideSomeLayerShared[TestEnvironment & Kafka](
-    producer ++ Scope.default ++ Runtime.removeDefaultLoggers ++ Runtime.addLogger(logger)
+    producer ++ Scope.default
   ) @@ withLiveClock @@ TestAspect.sequential @@ timeout(600.seconds)
 }
