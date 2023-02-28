@@ -270,6 +270,9 @@ object Consumer {
       }
     }
 
+
+    // TOTO
+
     override def partitionedStream[R, K, V](
       subscription: Subscription,
       keyDeserializer: Deserializer[R, K],
